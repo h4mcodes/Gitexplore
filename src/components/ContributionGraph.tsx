@@ -1,1 +1,5 @@
+const columns = Array.from({ length: 27 }, (_, column) => Array.from({ length: 7 }, (_, row) => (column * 3 + row * 5) % 5));
 
+export function ContributionGraph() {
+  return <div className="activity preview-surface"><div className="section-heading"><div><span className="eyebrow">ACTIVITY</span><h3>Contribution rhythm</h3></div><span className="year-label">Last 12 months</span></div><div className="graph-wrap"><div className="day-labels"><span>Mon</span><span>Wed</span><span>Fri</span></div><div className="graph"><div className="month-labels"><span>Jan</span><span>Mar</span><span>May</span><span>Jul</span><span>Sep</span><span>Nov</span></div><div className="graph-grid">{columns.map((column, x) => <div className="graph-column" key={x}>{column.map((level, y) => <span className={`level-${level}`} key={y} />)}</div>)}</div></div></div><div className="graph-bottom"><span>Less</span><i className="level-0" /><i className="level-1" /><i className="level-2" /><i className="level-3" /><i className="level-4" /><span>More</span></div></div>;
+}
