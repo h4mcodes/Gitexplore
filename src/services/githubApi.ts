@@ -1,4 +1,4 @@
-import type { GithubUser } from '../types/github';
+import type { GithubRepository, GithubUser } from '../types/github';
 
 const GITHUB_API_URL = 'https://api.github.com/users';
 
@@ -22,6 +22,23 @@ function isGithubUser(value: unknown): value is GithubUser {
     typeof user.created_at === 'string' && typeof user.html_url === 'string';
 }
 
+function isStringOrNull(value: unknown): value is string | null {
+  return typeof value === 'string' || value === null;
+}
+
+function isGithubRepository(value: unknown): value is GithubRepository {
+  if (!value || typeof value !== 'object') return false;
+  const repository = value as Record<string, unknown>;
+  return typeof repository.id === 'number' && typeof repository.name === 'string' &&
+    typeof repository.full_name === 'string' && isStringOrNull(repository.description) &&
+    typeof repository.html_url === 'string' && isStringOrNull(repository.homepage) &&
+    isStringOrNull(repository.language) && typeof repository.stargazers_count === 'number' &&
+    typeof repository.forks_count === 'number' && typeof repository.open_issues_count === 'number' &&
+    typeof repository.visibility === 'string' && typeof repository.private === 'boolean' &&
+    typeof repository.created_at === 'string' && typeof repository.updated_at === 'string' &&
+    isStringOrNull(repository.pushed_at) && typeof repository.default_branch === 'string';
+}
+
 export async function fetchGithubUser(username: string): Promise<GithubUser> {
   let response: Response;
   try {
@@ -38,6 +55,29 @@ export async function fetchGithubUser(username: string): Promise<GithubUser> {
   try {
     const data: unknown = await response.json();
     if (!isGithubUser(data)) throw new GithubApiError('unexpected');
+    return data;
+  } catch (error) {
+    if (error instanceof GithubApiError) throw error;
+    throw new GithubApiError('unexpected');
+  }
+}
+
+export async function fetchGithubRepositories(username: string): Promise<GithubRepository[]> {
+  let response: Response;
+  try {
+    response = await fetch(`${GITHUB_API_URL}/${encodeURIComponent(username)}/repos?per_page=100&sort=updated`, {
+      headers: { Accept: 'application/vnd.github+json' },
+    });
+  } catch {
+    throw new GithubApiError('network');
+  }
+
+  if (response.status === 404) throw new GithubApiError('not-found');
+  if (!response.ok) throw new GithubApiError('unexpected');
+
+  try {
+    const data: unknown = await response.json();
+    if (!Array.isArray(data) || !data.every(isGithubRepository)) throw new GithubApiError('unexpected');
     return data;
   } catch (error) {
     if (error instanceof GithubApiError) throw error;

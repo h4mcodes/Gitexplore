@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { StatsCard } from '../components/StatsCard';
-import { fetchGithubUser, GithubApiError } from '../services/githubApi';
+import { fetchGithubRepositories, fetchGithubUser, GithubApiError } from '../services/githubApi';
 import type { GithubUser } from '../types/github';
 
 function formatJoinedDate(date: string) {
@@ -30,7 +30,11 @@ export function Profile() {
     let active = true;
     setStatus('loading');
     fetchGithubUser(username).then((user) => {
-      if (active) { setProfile(user); setStatus('ready'); }
+      if (active) {
+        setProfile(user);
+        setStatus('ready');
+        void fetchGithubRepositories(user.login).catch(() => undefined);
+      }
     }).catch((error: unknown) => {
       if (!active) return;
       setProfile(null);
