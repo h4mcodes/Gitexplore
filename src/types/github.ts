@@ -31,3 +31,14 @@ export interface GithubRepository {
   pushed_at: string | null;
   default_branch: string;
 }
+
+export interface GithubBranchCommit {
+  sha: string;
+  url: string;
+}
+
+export interface GithubBranch {
+  name: string;
+  commit: GithubBranchCommit;
+  protected: boolean;
+}
