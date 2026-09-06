@@ -1,4 +1,4 @@
-import type { GithubBranch, GithubRepository, GithubUser } from '../types/github';
+import type { GithubBranch, GithubCommit, GithubRepository, GithubUser } from '../types/github';
 
 const GITHUB_API_URL = 'https://api.github.com/users';
 const GITHUB_REPOS_API_URL = 'https://api.github.com/repos';
@@ -111,6 +111,55 @@ export async function fetchGithubBranches(owner: string, repo: string): Promise<
   try {
     const data: unknown = await response.json();
     if (!Array.isArray(data) || !data.every(isGithubBranch)) throw new GithubApiError('unexpected');
+    return data;
+  } catch (error) {
+    if (error instanceof GithubApiError) throw error;
+    throw new GithubApiError('unexpected');
+  }
+}
+
+function isGithubCommit(value: unknown): value is GithubCommit {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Record<string, unknown>;
+  if (typeof item.sha !== 'string' || typeof item.html_url !== 'string') return false;
+  if (!item.commit || typeof item.commit !== 'object') return false;
+  const commit = item.commit as Record<string, unknown>;
+  if (typeof commit.message !== 'string') return false;
+  if (!Array.isArray(item.parents)) return false;
+  return true;
+}
+
+export async function fetchGithubCommits(
+  owner: string,
+  repo: string,
+  branch?: string,
+  page: number = 1,
+  perPage: number = 15
+): Promise<GithubCommit[]> {
+  let response: Response;
+  const query = new URLSearchParams({
+    page: String(page),
+    per_page: String(perPage),
+  });
+  if (branch) query.set('sha', branch);
+
+  try {
+    response = await fetch(
+      `${GITHUB_REPOS_API_URL}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?${query.toString()}`,
+      {
+        headers: { Accept: 'application/vnd.github+json' },
+      }
+    );
+  } catch {
+    throw new GithubApiError('network');
+  }
+
+  if (response.status === 404) throw new GithubApiError('not-found');
+  if (!response.ok) throw new GithubApiError('unexpected');
+
+  try {
+    const data: unknown = await response.json();
+    if (!Array.isArray(data) || !data.every(isGithubCommit)) throw new GithubApiError('unexpected');
     return data;
   } catch (error) {
     if (error instanceof GithubApiError) throw error;

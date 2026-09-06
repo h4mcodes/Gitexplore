@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ExternalLink, GitBranch, GitCommit, RotateCw, Search, ShieldCheck, X } from 'lucide-react';
+import { ExternalLink, GitBranch, GitCommit, History, RotateCw, Search, ShieldCheck, X } from 'lucide-react';
 import { fetchGithubBranches } from '../services/githubApi';
 import type { GithubBranch } from '../types/github';
+import { CommitHistory } from './CommitHistory';
 
 interface BranchExplorerProps {
   owner: string;
@@ -15,6 +16,7 @@ export function BranchExplorer({ owner, repo, defaultBranch, fullName, onClose }
   const [branches, setBranches] = useState<GithubBranch[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [query, setQuery] = useState('');
+  const [activeBranchForCommits, setActiveBranchForCommits] = useState<string | null>(null);
 
   const loadBranches = () => {
     setStatus('loading');
@@ -45,6 +47,21 @@ export function BranchExplorer({ owner, repo, defaultBranch, fullName, onClose }
     return branches.filter((b) => b.name.toLowerCase().includes(q));
   }, [branches, query]);
 
+  if (activeBranchForCommits) {
+    return (
+      <CommitHistory
+        owner={owner}
+        repo={repo}
+        selectedBranch={activeBranchForCommits}
+        fullName={fullName}
+        branches={branches}
+        onSelectBranch={(b) => setActiveBranchForCommits(b)}
+        onBack={() => setActiveBranchForCommits(null)}
+        onClose={onClose}
+      />
+    );
+  }
+
   return (
     <div className="branch-explorer-panel" aria-label={`Branches for ${fullName}`}>
       <div className="branch-explorer-header">
@@ -53,14 +70,28 @@ export function BranchExplorer({ owner, repo, defaultBranch, fullName, onClose }
           <span>Branches</span>
           {status === 'ready' && <span className="branch-count-badge">{branches.length}</span>}
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="branch-close-button"
-          aria-label="Close branch explorer"
-        >
-          <X size={14} />
-        </button>
+        <div className="branch-header-actions">
+          {defaultBranch && (
+            <button
+              type="button"
+              onClick={() => setActiveBranchForCommits(defaultBranch)}
+              className="branch-view-commits-quick"
+              title={`View commits on ${defaultBranch}`}
+              aria-label={`View commits on default branch ${defaultBranch}`}
+            >
+              <History size={12} />
+              <span>History</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="branch-close-button"
+            aria-label="Close branch explorer"
+          >
+            <X size={14} />
+          </button>
+        </div>
       </div>
 
       {status === 'loading' && (
@@ -132,6 +163,17 @@ export function BranchExplorer({ owner, repo, defaultBranch, fullName, onClose }
                     </div>
 
                     <div className="branch-item-meta">
+                      <button
+                        type="button"
+                        onClick={() => setActiveBranchForCommits(branch.name)}
+                        className="branch-commits-btn"
+                        title={`View commits on ${branch.name}`}
+                        aria-label={`View commits on ${branch.name}`}
+                      >
+                        <History size={11} />
+                        <span>Commits</span>
+                      </button>
+
                       {branch.commit?.sha && (
                         <a
                           href={`https://github.com/${owner}/${repo}/commit/${branch.commit.sha}`}

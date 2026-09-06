@@ -42,3 +42,38 @@ export interface GithubBranch {
   commit: GithubBranchCommit;
   protected: boolean;
 }
+
+export interface GithubCommitAuthorDetail {
+  name: string;
+  email: string;
+  date: string;
+}
+
+export interface GithubCommitUserSummary {
+  login: string;
+  id: number;
+  avatar_url: string;
+  html_url: string;
+}
+
+export interface GithubCommitParent {
+  sha: string;
+  url?: string;
+  html_url?: string;
+}
+
+export interface GithubCommitData {
+  author: GithubCommitAuthorDetail | null;
+  committer: GithubCommitAuthorDetail | null;
+  message: string;
+  comment_count: number;
+}
+
+export interface GithubCommit {
+  sha: string;
+  html_url: string;
+  commit: GithubCommitData;
+  author: GithubCommitUserSummary | null;
+  committer: GithubCommitUserSummary | null;
+  parents: GithubCommitParent[];
+}
