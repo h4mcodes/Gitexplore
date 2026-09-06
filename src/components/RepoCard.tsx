@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CircleDot, Clock3, ExternalLink, GitBranch, GitFork, Globe2, Star } from 'lucide-react';
 import type { GithubRepository } from '../types/github';
@@ -16,7 +16,7 @@ function normaliseHomepage(homepage: string) {
   return homepage.startsWith('http://') || homepage.startsWith('https://') ? homepage : `https://${homepage}`;
 }
 
-export function RepoCard(props: RepoCardProps) {
+export const RepoCard = memo(function RepoCard(props: RepoCardProps) {
   const [showBranches, setShowBranches] = useState(false);
 
   if ('repository' in props) {
@@ -30,7 +30,7 @@ export function RepoCard(props: RepoCardProps) {
         className={`repository-card ${showBranches ? 'branches-expanded' : ''}`}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, delay: Math.min(index * 0.04, 0.24), ease: 'easeOut' }}
+        transition={{ duration: 0.25, delay: Math.min(index * 0.03, 0.18), ease: 'easeOut' }}
       >
         <div className="repository-card-heading">
           <div className="repository-name">
@@ -58,7 +58,7 @@ export function RepoCard(props: RepoCardProps) {
             <button
               type="button"
               className={`repo-branches-btn ${showBranches ? 'active' : ''}`}
-              onClick={() => setShowBranches(!showBranches)}
+              onClick={() => setShowBranches((prev) => !prev)}
               aria-expanded={showBranches}
               aria-label={`Toggle branch explorer for ${repository.name}`}
             >
@@ -82,10 +82,10 @@ export function RepoCard(props: RepoCardProps) {
         <AnimatePresence>
           {showBranches && (
             <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.25, ease: 'easeInOut' }}
+              initial={{ opacity: 0, y: -6, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -6, scale: 0.98 }}
+              transition={{ duration: 0.18, ease: 'easeOut' }}
             >
               <BranchExplorer
                 owner={owner}
@@ -116,4 +116,4 @@ export function RepoCard(props: RepoCardProps) {
       </div>
     </div>
   );
-}
+});

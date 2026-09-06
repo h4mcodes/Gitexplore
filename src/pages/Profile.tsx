@@ -39,23 +39,58 @@ export function Profile() {
   const [repositorySort, setRepositorySort] = useState<RepositorySort>('updated');
   const [visibleRepositoryCount, setVisibleRepositoryCount] = useState(REPOSITORIES_PER_PAGE);
 
-  const languages = useMemo(() => Array.from(new Set(repositories.map((repository) => repository.language).filter((language): language is string => Boolean(language)))).sort((first, second) => first.localeCompare(second)), [repositories]);
+  const languages = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of repositories) {
+      if (r.language) set.add(r.language);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [repositories]);
+
   const filteredRepositories = useMemo(() => {
-    const query = repositoryQuery.trim().toLocaleLowerCase();
-    return repositories.filter((repository) => {
-      const matchesLanguage = selectedLanguage === 'all' || repository.language === selectedLanguage;
-      const searchableContent = [repository.name, repository.full_name, repository.description, repository.language].filter(Boolean).join(' ').toLocaleLowerCase();
-      return matchesLanguage && (!query || searchableContent.includes(query));
-    }).slice().sort((first, second) => {
-      if (repositorySort === 'stars') return second.stargazers_count - first.stargazers_count;
-      if (repositorySort === 'forks') return second.forks_count - first.forks_count;
-      if (repositorySort === 'created') return new Date(second.created_at).getTime() - new Date(first.created_at).getTime();
-      if (repositorySort === 'name') return first.name.localeCompare(second.name);
-      return new Date(second.updated_at).getTime() - new Date(first.updated_at).getTime();
-    });
+    const query = repositoryQuery.trim().toLowerCase();
+    let list = repositories;
+
+    if (selectedLanguage !== 'all') {
+      list = list.filter((r) => r.language === selectedLanguage);
+    }
+
+    if (query) {
+      list = list.filter((r) => {
+        return (
+          r.name.toLowerCase().includes(query) ||
+          r.full_name.toLowerCase().includes(query) ||
+          (r.description && r.description.toLowerCase().includes(query)) ||
+          (r.language && r.language.toLowerCase().includes(query))
+        );
+      });
+    }
+
+    if (repositorySort === 'stars') {
+      return list.slice().sort((a, b) => b.stargazers_count - a.stargazers_count);
+    }
+    if (repositorySort === 'forks') {
+      return list.slice().sort((a, b) => b.forks_count - a.forks_count);
+    }
+    if (repositorySort === 'created') {
+      return list.slice().sort((a, b) => b.created_at.localeCompare(a.created_at));
+    }
+    if (repositorySort === 'name') {
+      return list.slice().sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return list.slice().sort((a, b) => b.updated_at.localeCompare(a.updated_at));
   }, [repositories, repositoryQuery, repositorySort, selectedLanguage]);
+
   const visibleRepositories = filteredRepositories.slice(0, visibleRepositoryCount);
-  const repositoryTotals = useMemo(() => repositories.reduce((totals, repository) => ({ stars: totals.stars + repository.stargazers_count, forks: totals.forks + repository.forks_count }), { stars: 0, forks: 0 }), [repositories]);
+  const repositoryTotals = useMemo(() => {
+    let stars = 0;
+    let forks = 0;
+    for (const r of repositories) {
+      stars += r.stargazers_count;
+      forks += r.forks_count;
+    }
+    return { stars, forks };
+  }, [repositories]);
 
   const resetRepositoryFilters = () => {
     setRepositoryQuery('');
