@@ -96,9 +96,21 @@ export function BranchExplorer({ owner, repo, defaultBranch, fullName, onClose }
 
       {status === 'loading' && (
         <div className="branch-skeleton-list" aria-label="Loading branches">
-          <div className="branch-skeleton-item"><span /><span /><span /></div>
-          <div className="branch-skeleton-item"><span /><span /><span /></div>
-          <div className="branch-skeleton-item"><span /><span /><span /></div>
+          <div className="branch-skeleton-card">
+            <span className="branch-skeleton-icon" />
+            <span className="branch-skeleton-title" />
+            <span className="branch-skeleton-meta" />
+          </div>
+          <div className="branch-skeleton-card">
+            <span className="branch-skeleton-icon" />
+            <span className="branch-skeleton-title" />
+            <span className="branch-skeleton-meta" />
+          </div>
+          <div className="branch-skeleton-card">
+            <span className="branch-skeleton-icon" />
+            <span className="branch-skeleton-title" />
+            <span className="branch-skeleton-meta" />
+          </div>
         </div>
       )}
 

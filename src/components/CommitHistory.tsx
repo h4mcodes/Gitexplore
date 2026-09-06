@@ -1,6 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ExternalLink, GitBranch, GitCommit, RotateCw, Search, X } from 'lucide-react';
-import { fetchGithubCommits } from '../services/githubApi';
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  CornerDownRight,
+  ExternalLink,
+  GitBranch,
+  GitCommit,
+  GitMerge,
+  RotateCw,
+  Search,
+  X,
+} from 'lucide-react';
+import { buildCommitRelationshipModel, fetchGithubCommits } from '../services/githubApi';
 import type { GithubBranch, GithubCommit } from '../types/github';
 
 interface CommitHistoryProps {
@@ -57,11 +69,13 @@ export function CommitHistory({
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [query, setQuery] = useState('');
+  const [selectedSha, setSelectedSha] = useState<string | null>(null);
 
   const loadInitialCommits = () => {
     setStatus('loading');
     setPage(1);
     setHasMore(true);
+    setSelectedSha(null);
     fetchGithubCommits(owner, repo, selectedBranch, 1, COMMITS_PER_PAGE)
       .then((data) => {
         setCommits(data);
@@ -98,6 +112,17 @@ export function CommitHistory({
     loadInitialCommits();
   }, [owner, repo, selectedBranch]);
 
+  // Build the deterministic commit relationship DAG model
+  const commitGraph = useMemo(() => {
+    return buildCommitRelationshipModel(commits);
+  }, [commits]);
+
+  const stats = useMemo(() => {
+    const total = commitGraph.totalCommits;
+    const mergeCount = Object.values(commitGraph.nodes).filter((n) => n.isMerge).length;
+    return { total, mergeCount };
+  }, [commitGraph]);
+
   const filteredCommits = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return commits;
@@ -108,10 +133,18 @@ export function CommitHistory({
     });
   }, [commits, query]);
 
+  const scrollToSha = (targetSha: string) => {
+    setSelectedSha(targetSha);
+    const element = document.getElementById(`commit-node-${targetSha}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  };
+
   return (
     <div className="commit-history-panel" aria-label={`Commit history for ${fullName} on branch ${selectedBranch}`}>
       <div className="commit-history-header">
-        <div className="commit-history-nav">
+        <div className="commit-header-left">
           {onBack && (
             <button
               type="button"
@@ -123,7 +156,7 @@ export function CommitHistory({
               <ArrowLeft size={13} />
             </button>
           )}
-          <div className="commit-branch-context">
+          <div className="commit-title-group">
             <GitCommit size={14} className="commit-header-icon" />
             <span className="commit-header-title">Commits</span>
             {branches && onSelectBranch ? (
@@ -148,23 +181,64 @@ export function CommitHistory({
           </div>
         </div>
 
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="commit-close-btn"
-            aria-label="Close commit history"
-          >
-            <X size={14} />
-          </button>
-        )}
+        <div className="commit-header-right">
+          {status === 'ready' && commits.length > 0 && (
+            <div className="commit-model-badge" title="Commit Relationship Model Active">
+              <span>{stats.total} nodes</span>
+              {stats.mergeCount > 0 && (
+                <>
+                  <span className="commit-badge-dot">·</span>
+                  <span>{stats.mergeCount} {stats.mergeCount === 1 ? 'merge' : 'merges'}</span>
+                </>
+              )}
+            </div>
+          )}
+
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="commit-close-btn"
+              aria-label="Close commit history"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       {status === 'loading' && (
         <div className="commit-skeleton-list" aria-label="Loading commit history">
-          <div className="commit-skeleton-item"><span /><span /><span /></div>
-          <div className="commit-skeleton-item"><span /><span /><span /></div>
-          <div className="commit-skeleton-item"><span /><span /><span /></div>
+          <div className="commit-skeleton-card">
+            <div className="commit-skeleton-top">
+              <span className="commit-skeleton-avatar" />
+              <span className="commit-skeleton-title" />
+              <span className="commit-skeleton-actions" />
+            </div>
+            <div className="commit-skeleton-bottom">
+              <span className="commit-skeleton-meta" />
+            </div>
+          </div>
+          <div className="commit-skeleton-card">
+            <div className="commit-skeleton-top">
+              <span className="commit-skeleton-avatar" />
+              <span className="commit-skeleton-title" />
+              <span className="commit-skeleton-actions" />
+            </div>
+            <div className="commit-skeleton-bottom">
+              <span className="commit-skeleton-meta" />
+            </div>
+          </div>
+          <div className="commit-skeleton-card">
+            <div className="commit-skeleton-top">
+              <span className="commit-skeleton-avatar" />
+              <span className="commit-skeleton-title" />
+              <span className="commit-skeleton-actions" />
+            </div>
+            <div className="commit-skeleton-bottom">
+              <span className="commit-skeleton-meta" />
+            </div>
+          </div>
         </div>
       )}
 
@@ -185,14 +259,14 @@ export function CommitHistory({
 
       {status === 'ready' && commits.length > 0 && (
         <>
-          {commits.length > 4 && (
+          {commits.length > 3 && (
             <div className="commit-search-bar">
               <Search size={12} />
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search commit message or author..."
+                placeholder="Search commit message, author, or SHA..."
                 aria-label="Filter commits"
               />
               {query && (
@@ -215,15 +289,22 @@ export function CommitHistory({
           ) : (
             <ul className="commit-list">
               {filteredCommits.map((item) => {
+                const node = commitGraph.nodes[item.sha];
                 const authorName = item.author?.login || item.commit.author?.name || 'Unknown';
                 const avatarUrl = item.author?.avatar_url;
                 const commitDate = item.commit.author?.date;
                 const lines = item.commit.message.split('\n');
                 const title = lines[0];
+                const isSelected = selectedSha === item.sha;
 
                 return (
-                  <li key={item.sha} className="commit-item">
-                    <div className="commit-item-left">
+                  <li
+                    key={item.sha}
+                    id={`commit-node-${item.sha}`}
+                    className={`commit-item ${isSelected ? 'is-selected' : ''}`}
+                  >
+                    <div className="commit-item-main">
+                      {/* Left: Avatar */}
                       <div className="commit-avatar-wrap">
                         {avatarUrl ? (
                           <img src={avatarUrl} alt={authorName} className="commit-avatar" />
@@ -233,10 +314,25 @@ export function CommitHistory({
                           </span>
                         )}
                       </div>
+
+                      {/* Middle: Content */}
                       <div className="commit-item-content">
-                        <p className="commit-message-text" title={item.commit.message}>
-                          {title}
-                        </p>
+                        <div className="commit-title-row">
+                          <span className="commit-message-text" title={item.commit.message}>
+                            {title}
+                          </span>
+                          {node?.isMerge && (
+                            <span className="commit-type-tag merge-tag" title="Merge commit (multiple parents)">
+                              <GitMerge size={9} /> MERGE
+                            </span>
+                          )}
+                          {node?.isRoot && (
+                            <span className="commit-type-tag root-tag" title="Initial commit (no parents)">
+                              INITIAL
+                            </span>
+                          )}
+                        </div>
+
                         <div className="commit-item-subline">
                           <span className="commit-author-name">{authorName}</span>
                           <span className="commit-dot-sep">·</span>
@@ -247,31 +343,87 @@ export function CommitHistory({
                           )}
                         </div>
                       </div>
+
+                      {/* Right: Actions */}
+                      <div className="commit-item-right">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSha(isSelected ? null : item.sha)}
+                          className={`commit-relation-toggle ${isSelected ? 'active' : ''}`}
+                          title="Inspect parent-child commit lineage"
+                          aria-label="Inspect commit relationships"
+                        >
+                          <CornerDownRight size={10} />
+                          <span>Lineage</span>
+                          {isSelected ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                        </button>
+
+                        <a
+                          href={item.html_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="commit-sha-pill"
+                          title={`View commit ${item.sha} on GitHub`}
+                          aria-label={`View commit ${item.sha.slice(0, 7)} on GitHub`}
+                        >
+                          <GitCommit size={11} />
+                          <code>{item.sha.slice(0, 7)}</code>
+                          <ExternalLink size={10} className="commit-ext-icon" />
+                        </a>
+                      </div>
                     </div>
 
-                    <div className="commit-item-right">
-                      <a
-                        href={item.html_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="commit-sha-pill"
-                        title={`View commit ${item.sha} on GitHub`}
-                        aria-label={`View commit ${item.sha.slice(0, 7)} on GitHub`}
-                      >
-                        <GitCommit size={11} />
-                        <code>{item.sha.slice(0, 7)}</code>
-                      </a>
-                      <a
-                        href={item.html_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="commit-external-link"
-                        title="Open on GitHub"
-                        aria-label="Open commit on GitHub"
-                      >
-                        <ExternalLink size={12} />
-                      </a>
-                    </div>
+                    {/* Commit Relationship Lineage Panel */}
+                    {isSelected && node && (
+                      <div className="commit-lineage-drawer">
+                        <div className="lineage-section">
+                          <span className="lineage-label">Parents:</span>
+                          {node.parentShas.length === 0 ? (
+                            <span className="lineage-empty">None (initial commit)</span>
+                          ) : (
+                            <div className="lineage-pill-group">
+                              {node.parentShas.map((pSha) => {
+                                const inList = pSha in commitGraph.nodes;
+                                return (
+                                  <button
+                                    type="button"
+                                    key={pSha}
+                                    onClick={() => inList && scrollToSha(pSha)}
+                                    className={`lineage-sha-link ${inList ? 'is-navigable' : 'is-external'}`}
+                                    title={inList ? `Jump to parent commit ${pSha}` : `Parent commit ${pSha} (not in loaded batch)`}
+                                  >
+                                    <code>{pSha.slice(0, 7)}</code>
+                                    {inList && <span className="lineage-jump-hint">jump</span>}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="lineage-section">
+                          <span className="lineage-label">Children:</span>
+                          {node.childShas.length === 0 ? (
+                            <span className="lineage-empty">Head / Latest loaded in branch</span>
+                          ) : (
+                            <div className="lineage-pill-group">
+                              {node.childShas.map((cSha) => (
+                                <button
+                                  type="button"
+                                  key={cSha}
+                                  onClick={() => scrollToSha(cSha)}
+                                  className="lineage-sha-link is-navigable"
+                                  title={`Jump to child commit ${cSha}`}
+                                >
+                                  <code>{cSha.slice(0, 7)}</code>
+                                  <span className="lineage-jump-hint">jump</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </li>
                 );
               })}

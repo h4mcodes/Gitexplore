@@ -77,3 +77,33 @@ export interface GithubCommit {
   committer: GithubCommitUserSummary | null;
   parents: GithubCommitParent[];
 }
+
+export interface CommitNodeAuthor {
+  name: string;
+  email: string | null;
+  date: string;
+  avatarUrl: string | null;
+  login: string | null;
+}
+
+export interface CommitNode {
+  sha: string;
+  shortSha: string;
+  message: string;
+  author: CommitNodeAuthor;
+  timestamp: string;
+  parentShas: string[];
+  childShas: string[];
+  isMerge: boolean;
+  isRoot: boolean;
+  htmlUrl: string;
+  rawCommit: GithubCommit;
+}
+
+export interface CommitRelationshipGraph {
+  nodes: Record<string, CommitNode>;
+  orderedShas: string[];
+  rootShas: string[];
+  headShas: string[];
+  totalCommits: number;
+}

@@ -1,4 +1,11 @@
-import type { GithubBranch, GithubCommit, GithubRepository, GithubUser } from '../types/github';
+import type {
+  CommitNode,
+  CommitRelationshipGraph,
+  GithubBranch,
+  GithubCommit,
+  GithubRepository,
+  GithubUser,
+} from '../types/github';
 
 const GITHUB_API_URL = 'https://api.github.com/users';
 const GITHUB_REPOS_API_URL = 'https://api.github.com/repos';
@@ -165,4 +172,94 @@ export async function fetchGithubCommits(
     if (error instanceof GithubApiError) throw error;
     throw new GithubApiError('unexpected');
   }
+}
+
+/**
+ * Builds a deterministic, bidirectional Commit Relationship Model (parent <-> child DAG)
+ * from real GitHub commit history.
+ */
+export function buildCommitRelationshipModel(commits: GithubCommit[]): CommitRelationshipGraph {
+  const nodes: Record<string, CommitNode> = {};
+  const orderedShas: string[] = [];
+
+  // Pass 1: Instantiate individual commit nodes
+  for (const commit of commits) {
+    const sha = commit.sha;
+    if (!sha || nodes[sha]) continue;
+
+    const parentShas = Array.isArray(commit.parents)
+      ? commit.parents
+          .map((p) => p.sha)
+          .filter((s): s is string => typeof s === 'string' && s.length > 0)
+      : [];
+
+    const date = commit.commit.author?.date || commit.commit.committer?.date || new Date().toISOString();
+    const name = commit.commit.author?.name || commit.commit.committer?.name || commit.author?.login || 'Unknown Author';
+    const email = commit.commit.author?.email || commit.commit.committer?.email || null;
+    const avatarUrl = commit.author?.avatar_url || commit.committer?.avatar_url || null;
+    const login = commit.author?.login || commit.committer?.login || null;
+
+    nodes[sha] = {
+      sha,
+      shortSha: sha.slice(0, 7),
+      message: commit.commit.message,
+      author: {
+        name,
+        email,
+        date,
+        avatarUrl,
+        login,
+      },
+      timestamp: date,
+      parentShas,
+      childShas: [],
+      isMerge: parentShas.length > 1,
+      isRoot: parentShas.length === 0,
+      htmlUrl: commit.html_url,
+      rawCommit: commit,
+    };
+
+    orderedShas.push(sha);
+  }
+
+  // Pass 2: Establish bidirectional parent -> child relationship links
+  for (const sha of orderedShas) {
+    const node = nodes[sha];
+    if (!node) continue;
+
+    for (const parentSha of node.parentShas) {
+      const parentNode = nodes[parentSha];
+      if (parentNode && !parentNode.childShas.includes(sha)) {
+        parentNode.childShas.push(sha);
+      }
+    }
+  }
+
+  // Pass 3: Identify root commits (0 parents or parents outside the loaded set) and head commits (0 children)
+  const rootShas = orderedShas.filter((sha) => nodes[sha].parentShas.length === 0 || !nodes[sha].parentShas.some((pSha) => pSha in nodes));
+  const headShas = orderedShas.filter((sha) => nodes[sha].childShas.length === 0);
+
+  return {
+    nodes,
+    orderedShas,
+    rootShas,
+    headShas,
+    totalCommits: orderedShas.length,
+  };
+}
+
+export function getParentCommits(graph: CommitRelationshipGraph, sha: string): CommitNode[] {
+  const node = graph.nodes[sha];
+  if (!node) return [];
+  return node.parentShas.map((parentSha) => graph.nodes[parentSha]).filter((p): p is CommitNode => p !== undefined);
+}
+
+export function getChildCommits(graph: CommitRelationshipGraph, sha: string): CommitNode[] {
+  const node = graph.nodes[sha];
+  if (!node) return [];
+  return node.childShas.map((childSha) => graph.nodes[childSha]).filter((c): c is CommitNode => c !== undefined);
+}
+
+export function getCommitNode(graph: CommitRelationshipGraph, sha: string): CommitNode | undefined {
+  return graph.nodes[sha];
 }
