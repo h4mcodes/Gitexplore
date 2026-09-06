@@ -40,7 +40,7 @@ export const RepoCard = memo(function RepoCard(props: RepoCardProps) {
           <span className="repository-visibility">{repository.visibility}</span>
         </div>
 
-        {repository.description && <p className="repository-description">{repository.description}</p>}
+        <p className="repository-description">{repository.description || ''}</p>
 
         <div className="repository-details">
           <span className="repository-language">
