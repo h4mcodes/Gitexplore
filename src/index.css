@@ -224,3 +224,95 @@ h1 { color: #18304c; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25); } h1 span {
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { 100% { transform: rotate(360deg); } }
 
+/* Contribution & Activity Section Styles (Milestone 4) */
+.contribution-section { margin-top: 34px; padding: 22px; border: 1px solid rgba(255,255,255,.5); border-radius: 16px; background: rgba(242,248,253,.36); box-shadow: inset 0 1px 0 rgba(255,255,255,.65), 0 9px 24px rgba(76,101,126,.06); backdrop-filter: blur(12px); }
+.contribution-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.contribution-header-left { display: flex; align-items: center; gap: 12px; }
+.contribution-icon-pill { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 10px; background: rgba(36,86,145,.12); color: #245691; border: 1px solid rgba(36,86,145,.2); }
+.contribution-header-left h2 { margin: 2px 0 0; color: #193352; font-size: 20px; letter-spacing: -.03em; font-weight: 700; }
+.contribution-header-stats { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.contrib-stat-item { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 8px; border: 1px solid rgba(35,70,108,.16); background: rgba(255,255,255,.5); color: #244870; font: 10px 'DM Mono', monospace; font-weight: 550; }
+.contrib-stat-item strong { color: #153250; font-weight: 700; }
+.text-emerald { color: #1a7f4e; }
+.text-blue { color: #2563eb; }
+.text-orange { color: #d97706; }
+
+/* Matrix / Heatmap Card */
+.activity-matrix-card { padding: 16px; border: 1px solid rgba(35,70,108,.15); border-radius: 12px; background: rgba(235,244,253,.5); box-shadow: inset 0 1px 0 rgba(255,255,255,.7); }
+.activity-matrix-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 10px; flex-wrap: wrap; }
+.activity-matrix-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 650; color: #183350; }
+.activity-matrix-legend { display: flex; align-items: center; gap: 4px; font: 9px 'DM Mono', monospace; font-weight: 500; color: #4b6b8f; }
+.activity-matrix-legend i { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+
+.matrix-scroll { overflow-x: auto; padding-bottom: 6px; }
+.matrix-scroll::-webkit-scrollbar { height: 4px; }
+.matrix-scroll::-webkit-scrollbar-thumb { background: rgba(35,70,108,.2); border-radius: 4px; }
+
+.graph-column span { width: 10px; height: 10px; border-radius: 2px; display: block; transition: transform .12s, box-shadow .12s; cursor: pointer; }
+.graph-column span:hover, .graph-column span.is-highlighted { transform: scale(1.3); z-index: 5; box-shadow: 0 0 6px rgba(27,114,79,.4); }
+
+.matrix-tooltip-bar { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(35,70,108,.1); display: flex; align-items: center; justify-content: flex-end; min-height: 24px; }
+.matrix-tooltip-text { font: 10px 'DM Mono', monospace; font-weight: 650; color: #17426b; }
+.matrix-tooltip-hint { font: 9px 'DM Mono', monospace; font-weight: 450; color: #6182a4; font-style: italic; }
+
+/* Filter Bar */
+.activity-filter-bar { display: flex; align-items: center; gap: 6px; margin: 18px 0 14px; flex-wrap: wrap; }
+.activity-filter-pill { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border: 1px solid rgba(35,70,108,.2); border-radius: 8px; background: rgba(255,255,255,.5); color: #20456e; font: 10px 'DM Mono', monospace; font-weight: 600; cursor: pointer; transition: background .15s, color .15s, border-color .15s, transform .15s; }
+.activity-filter-pill:hover { background: rgba(255,255,255,.8); color: #142c48; transform: translateY(-1px); }
+.activity-filter-pill.active { background: #245691; color: #ffffff; border-color: #245691; box-shadow: 0 2px 8px rgba(36,86,145,.25); }
+
+/* Activity Stream Feed */
+.activity-feed-list { display: flex; flex-direction: column; gap: 8px; }
+.activity-event-card { display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px; border: 1px solid rgba(35,70,108,.12); border-radius: 10px; background: rgba(255,255,255,.5); backdrop-filter: blur(8px); transition: background .15s, border-color .15s; }
+.activity-event-card:hover { background: rgba(255,255,255,.8); border-color: rgba(35,70,108,.22); }
+.activity-event-icon-column { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 7px; background: rgba(255,255,255,.7); border: 1px solid rgba(35,70,108,.15); flex: none; margin-top: 1px; }
+.icon-push { color: #2563eb; }
+.icon-pr { color: #7c3aed; }
+.icon-issue { color: #16a34a; }
+.icon-create { color: #0891b2; }
+.icon-star { color: #d97706; }
+.icon-fork { color: #4f46e5; }
+.icon-other { color: #4b6b8f; }
+
+.activity-event-body { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.activity-event-main-line { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 12px; color: #223f60; }
+.activity-action-label { color: #355375; font-weight: 500; }
+.activity-action-label strong { color: #16304d; font-weight: 700; }
+.activity-repo-link { display: inline-flex; align-items: center; gap: 3px; font: 11px 'DM Mono', monospace; font-weight: 650; color: #245691; text-decoration: none; padding: 1px 5px; border-radius: 4px; background: rgba(36,86,145,.08); transition: background .15s, color .15s; }
+.activity-repo-link:hover { background: #245691; color: #ffffff; }
+.activity-time-tag { margin-left: auto; color: #6282a3; font: 9.5px 'DM Mono', monospace; font-weight: 500; white-space: nowrap; }
+
+.activity-detail-box { padding: 4px 8px; border-radius: 6px; background: rgba(235,244,253,.6); border: 1px solid rgba(35,70,108,.1); }
+.activity-target-link { color: #183350; font-size: 11px; font-weight: 600; text-decoration: none; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-target-link:hover { color: #245691; text-decoration: underline; }
+
+.activity-commits-block { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+.activity-commit-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.commit-sha-micro { font: 9.5px 'DM Mono', monospace; font-weight: 600; color: #244970; background: rgba(255,255,255,.8); padding: 1px 5px; border-radius: 4px; border: 1px solid rgba(35,70,108,.15); flex: none; }
+.commit-msg-micro { font-size: 11px; color: #243e5c; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.activity-toggle-commits { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: #245691; font: 9px 'DM Mono', monospace; font-weight: 650; cursor: pointer; padding: 2px 0; width: fit-content; }
+.activity-toggle-commits:hover { text-decoration: underline; }
+
+.activity-empty-feed { padding: 20px; text-align: center; color: #355375; font-size: 12px; font-weight: 500; }
+.activity-empty-feed p { margin: 0; }
+
+.contribution-error-box { padding: 20px; text-align: center; color: #244569; }
+.contribution-error-box p { margin: 0 0 10px; font-size: 12px; }
+.contribution-retry-btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border: 0; border-radius: 8px; background: #245691; color: #fff; font: 10px 'DM Mono', monospace; font-weight: 650; cursor: pointer; }
+.contribution-retry-btn:hover { background: #1a4475; }
+
+/* Skeletons */
+.contribution-skeleton-wrap { display: flex; flex-direction: column; gap: 10px; }
+.shimmer-bg { background: linear-gradient(110deg,rgba(255,255,255,.3),rgba(255,255,255,.6),rgba(255,255,255,.3)); background-size: 220% 100%; animation: shimmer 1.6s infinite; border-radius: 10px; }
+.activity-matrix-skeleton { height: 140px; }
+.activity-filter-skeleton { height: 32px; width: 60%; }
+.activity-item-skeleton { height: 48px; }
+
+@media (max-width: 680px) {
+  .contribution-section { padding: 16px; margin-top: 24px; }
+  .contribution-header { flex-direction: column; gap: 12px; }
+  .contribution-header-stats { width: 100%; }
+  .activity-time-tag { margin-left: 0; width: 100%; }
+}
+
+

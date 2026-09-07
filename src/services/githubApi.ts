@@ -1,10 +1,14 @@
 import type {
+  ActivityStats,
   CommitNode,
   CommitRelationshipGraph,
+  DailyActivityItem,
   GithubBranch,
   GithubCommit,
+  GithubEvent,
   GithubRepository,
   GithubUser,
+  ProcessedActivity,
 } from '../types/github';
 
 const GITHUB_API_URL = 'https://api.github.com/users';
@@ -263,3 +267,179 @@ export function getChildCommits(graph: CommitRelationshipGraph, sha: string): Co
 export function getCommitNode(graph: CommitRelationshipGraph, sha: string): CommitNode | undefined {
   return graph.nodes[sha];
 }
+
+function isGithubEvent(value: unknown): value is GithubEvent {
+  if (!value || typeof value !== 'object') return false;
+  const ev = value as Record<string, unknown>;
+  return typeof ev.id === 'string' &&
+    typeof ev.type === 'string' &&
+    typeof ev.created_at === 'string' &&
+    typeof ev.repo === 'object' && ev.repo !== null;
+}
+
+export async function fetchGithubUserEvents(
+  username: string,
+  page: number = 1,
+  perPage: number = 100
+): Promise<GithubEvent[]> {
+  let response: Response;
+  const query = new URLSearchParams({
+    page: String(page),
+    per_page: String(perPage),
+  });
+
+  try {
+    response = await fetch(
+      `${GITHUB_API_URL}/${encodeURIComponent(username)}/events?${query.toString()}`,
+      {
+        headers: { Accept: 'application/vnd.github+json' },
+      }
+    );
+  } catch {
+    throw new GithubApiError('network');
+  }
+
+  if (response.status === 404) throw new GithubApiError('not-found');
+  if (!response.ok) throw new GithubApiError('unexpected');
+
+  try {
+    const data: unknown = await response.json();
+    if (!Array.isArray(data) || !data.every(isGithubEvent)) throw new GithubApiError('unexpected');
+    return data;
+  } catch (error) {
+    if (error instanceof GithubApiError) throw error;
+    throw new GithubApiError('unexpected');
+  }
+}
+
+/**
+ * Transforms real GitHub events into a processed activity model with statistics,
+ * aggregated daily intensities, and calendar grid layout.
+ */
+export function processUserActivity(events: GithubEvent[], weeksCount: number = 28): ProcessedActivity {
+  const stats: ActivityStats = {
+    totalEvents: events.length,
+    pushEvents: 0,
+    totalCommits: 0,
+    pullRequestEvents: 0,
+    issueEvents: 0,
+    createEvents: 0,
+    watchEvents: 0,
+    forkEvents: 0,
+  };
+
+  const dayCounts: Record<string, number> = {};
+
+  for (const event of events) {
+    const dateKey = event.created_at.split('T')[0];
+    let weight = 1;
+
+    switch (event.type) {
+      case 'PushEvent': {
+        stats.pushEvents += 1;
+        const commitsCount = event.payload.commits?.length ?? event.payload.size ?? 1;
+        stats.totalCommits += commitsCount;
+        weight = commitsCount;
+        break;
+      }
+      case 'PullRequestEvent':
+        stats.pullRequestEvents += 1;
+        weight = 2;
+        break;
+      case 'IssuesEvent':
+      case 'IssueCommentEvent':
+        stats.issueEvents += 1;
+        break;
+      case 'CreateEvent':
+        stats.createEvents += 1;
+        break;
+      case 'WatchEvent':
+        stats.watchEvents += 1;
+        break;
+      case 'ForkEvent':
+        stats.forkEvents += 1;
+        break;
+      default:
+        break;
+    }
+
+    dayCounts[dateKey] = (dayCounts[dateKey] || 0) + weight;
+  }
+
+  // Construct calendar grid of weeksCount columns × 7 days
+  const today = new Date();
+  const dailyGrid: DailyActivityItem[][] = [];
+  const monthLabels: { label: string; colIndex: number }[] = [];
+  let lastMonth = -1;
+  let mostActiveDay: { date: string; count: number } | null = null;
+  let totalRecentContributions = 0;
+
+  // Calculate start date: ending on the upcoming Saturday/Sunday of the current week
+  const dayOfWeek = today.getDay(); // 0 is Sunday, 6 is Saturday
+  const daysToEndOfWeek = 6 - dayOfWeek;
+  const endDate = new Date(today);
+  endDate.setDate(today.getDate() + daysToEndOfWeek);
+
+  const totalDays = weeksCount * 7;
+  const startDate = new Date(endDate);
+  startDate.setDate(endDate.getDate() - totalDays + 1);
+
+  const cursor = new Date(startDate);
+
+  for (let col = 0; col < weeksCount; col++) {
+    const week: DailyActivityItem[] = [];
+    for (let row = 0; row < 7; row++) {
+      const year = cursor.getFullYear();
+      const month = String(cursor.getMonth() + 1).padStart(2, '0');
+      const day = String(cursor.getDate()).padStart(2, '0');
+      const dateKey = `${year}-${month}-${day}`;
+
+      const currentMonth = cursor.getMonth();
+      if (row === 0 && currentMonth !== lastMonth && col > 0 && col < weeksCount - 1) {
+        monthLabels.push({
+          label: cursor.toLocaleString('en', { month: 'short' }),
+          colIndex: col,
+        });
+        lastMonth = currentMonth;
+      } else if (col === 0 && row === 0) {
+        monthLabels.push({
+          label: cursor.toLocaleString('en', { month: 'short' }),
+          colIndex: 0,
+        });
+        lastMonth = currentMonth;
+      }
+
+      const count = dayCounts[dateKey] || 0;
+      totalRecentContributions += count;
+
+      if (count > 0 && (!mostActiveDay || count > mostActiveDay.count)) {
+        mostActiveDay = { date: dateKey, count };
+      }
+
+      let level: 0 | 1 | 2 | 3 | 4 = 0;
+      if (count >= 8) level = 4;
+      else if (count >= 5) level = 3;
+      else if (count >= 2) level = 2;
+      else if (count >= 1) level = 1;
+
+      week.push({
+        date: dateKey,
+        count,
+        level,
+      });
+
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    dailyGrid.push(week);
+  }
+
+  return {
+    events,
+    stats,
+    dailyGrid,
+    monthLabels,
+    totalRecentContributions,
+    mostActiveDay,
+  };
+}
+

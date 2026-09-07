@@ -107,3 +107,88 @@ export interface CommitRelationshipGraph {
   headShas: string[];
   totalCommits: number;
 }
+
+export interface GithubEventPayloadCommit {
+  sha: string;
+  message: string;
+  author: {
+    name: string;
+    email: string;
+  };
+  url: string;
+}
+
+export interface GithubEventPayload {
+  action?: string;
+  ref?: string | null;
+  ref_type?: string;
+  master_branch?: string;
+  description?: string | null;
+  pusher_type?: string;
+  size?: number;
+  distinct_size?: number;
+  commits?: GithubEventPayloadCommit[];
+  issue?: {
+    number: number;
+    title: string;
+    html_url: string;
+    state?: string;
+  };
+  pull_request?: {
+    number: number;
+    title: string;
+    html_url: string;
+    state?: string;
+    merged?: boolean;
+  };
+  forkee?: {
+    name: string;
+    full_name: string;
+    html_url: string;
+  };
+}
+
+export interface GithubEvent {
+  id: string;
+  type: string;
+  actor: {
+    id: number;
+    login: string;
+    avatar_url: string;
+  };
+  repo: {
+    id: number;
+    name: string;
+    url: string;
+  };
+  payload: GithubEventPayload;
+  public: boolean;
+  created_at: string;
+}
+
+export interface ActivityStats {
+  totalEvents: number;
+  pushEvents: number;
+  totalCommits: number;
+  pullRequestEvents: number;
+  issueEvents: number;
+  createEvents: number;
+  watchEvents: number;
+  forkEvents: number;
+}
+
+export interface DailyActivityItem {
+  date: string;
+  count: number;
+  level: 0 | 1 | 2 | 3 | 4;
+}
+
+export interface ProcessedActivity {
+  events: GithubEvent[];
+  stats: ActivityStats;
+  dailyGrid: DailyActivityItem[][];
+  monthLabels: { label: string; colIndex: number }[];
+  totalRecentContributions: number;
+  mostActiveDay: { date: string; count: number } | null;
+}
+
