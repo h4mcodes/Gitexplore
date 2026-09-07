@@ -293,6 +293,17 @@ h1 { color: #18304c; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25); } h1 span {
 .activity-toggle-commits { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: #245691; font: 9px 'DM Mono', monospace; font-weight: 650; cursor: pointer; padding: 2px 0; width: fit-content; }
 .activity-toggle-commits:hover { text-decoration: underline; }
 
+/* Older Events Collapsible Dropdown */
+.activity-older-events-container { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.activity-older-events-toggle { width: 100%; height: 38px; display: inline-flex; align-items: center; justify-content: space-between; padding: 0 14px; border: 1px dashed rgba(35,70,108,.25); border-radius: 10px; background: rgba(255,255,255,.45); backdrop-filter: blur(8px); color: #20456e; font: 10.5px 'DM Mono', monospace; font-weight: 600; cursor: pointer; transition: background .18s, border-color .18s, color .18s, box-shadow .18s; }
+.activity-older-events-toggle:hover { background: rgba(255,255,255,.8); border-color: rgba(36,86,145,.4); color: #142c48; }
+.activity-older-events-toggle.is-active { background: rgba(230,242,253,.75); border-style: solid; border-color: rgba(36,86,145,.4); color: #163250; box-shadow: 0 2px 10px rgba(36,86,145,.1); }
+.older-toggle-chevron { color: #3b5f88; transition: transform .18s ease; flex: none; }
+
+.activity-older-events-menu { display: flex; flex-direction: column; gap: 8px; padding: 8px; border: 1px solid rgba(35,70,108,.16); border-radius: 12px; background: rgba(235,244,253,.5); backdrop-filter: blur(12px); max-height: 380px; overflow-y: auto; overflow-x: hidden; animation: glassFadeIn .18s cubic-bezier(0.16, 1, 0.3, 1); }
+.activity-older-events-menu::-webkit-scrollbar { width: 4px; }
+.activity-older-events-menu::-webkit-scrollbar-thumb { background: rgba(35,70,108,.2); border-radius: 4px; }
+
 .activity-empty-feed { padding: 20px; text-align: center; color: #355375; font-size: 12px; font-weight: 500; }
 .activity-empty-feed p { margin: 0; }
 

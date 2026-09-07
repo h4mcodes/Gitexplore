@@ -131,6 +131,7 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
   const [activeFilter, setActiveFilter] = useState<EventFilterCategory>('all');
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [hoveredDay, setHoveredDay] = useState<DailyActivityItem | null>(null);
+  const [showOlderEvents, setShowOlderEvents] = useState<boolean>(false);
 
   const loadActivity = () => {
     if (!username) return;
@@ -164,6 +165,176 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
       return data.events.filter((e) => e.type === 'WatchEvent' || e.type === 'ForkEvent');
     return data.events;
   }, [data, activeFilter]);
+
+  const topEvents = useMemo(() => filteredEvents.slice(0, 3), [filteredEvents]);
+  const olderEvents = useMemo(() => filteredEvents.slice(3), [filteredEvents]);
+
+  const renderEventCard = (event: GithubEvent) => {
+    const isExpanded = expandedEventId === event.id;
+    const repoName = event.repo?.name || 'Unknown repo';
+    const repoUrl = `https://github.com/${repoName}`;
+
+    return (
+      <div key={event.id} className="activity-event-card">
+        <div className="activity-event-icon-column">
+          {event.type === 'PushEvent' && <GitCommit size={14} className="icon-push" />}
+          {event.type === 'PullRequestEvent' && (
+            <GitPullRequest size={14} className="icon-pr" />
+          )}
+          {(event.type === 'IssuesEvent' || event.type === 'IssueCommentEvent') && (
+            <CircleDot size={14} className="icon-issue" />
+          )}
+          {event.type === 'CreateEvent' && (
+            <PlusCircle size={14} className="icon-create" />
+          )}
+          {event.type === 'WatchEvent' && <Star size={14} className="icon-star" />}
+          {event.type === 'ForkEvent' && <GitFork size={14} className="icon-fork" />}
+          {![
+            'PushEvent',
+            'PullRequestEvent',
+            'IssuesEvent',
+            'IssueCommentEvent',
+            'CreateEvent',
+            'WatchEvent',
+            'ForkEvent',
+          ].includes(event.type) && <Activity size={14} className="icon-other" />}
+        </div>
+
+        <div className="activity-event-body">
+          <div className="activity-event-main-line">
+            <span className="activity-action-label">
+              {event.type === 'PushEvent' && (
+                <>
+                  Pushed{' '}
+                  <strong>
+                    {event.payload.commits?.length || event.payload.size || 1}
+                  </strong>{' '}
+                  {event.payload.commits?.length === 1 ? 'commit' : 'commits'} to
+                </>
+              )}
+              {event.type === 'PullRequestEvent' && (
+                <>
+                  {event.payload.action === 'opened'
+                    ? 'Opened pull request in'
+                    : event.payload.action === 'closed'
+                    ? 'Closed pull request in'
+                    : 'Updated pull request in'}
+                </>
+              )}
+              {event.type === 'IssuesEvent' && (
+                <>
+                  {event.payload.action === 'opened' ? 'Opened issue in' : 'Updated issue in'}
+                </>
+              )}
+              {event.type === 'IssueCommentEvent' && <>Commented on issue in</>}
+              {event.type === 'CreateEvent' && (
+                <>
+                  Created {event.payload.ref_type || 'resource'}{' '}
+                  {event.payload.ref ? `"${event.payload.ref}"` : ''} in
+                </>
+              )}
+              {event.type === 'WatchEvent' && <>Starred repository</>}
+              {event.type === 'ForkEvent' && <>Forked repository</>}
+              {![
+                'PushEvent',
+                'PullRequestEvent',
+                'IssuesEvent',
+                'IssueCommentEvent',
+                'CreateEvent',
+                'WatchEvent',
+                'ForkEvent',
+              ].includes(event.type) && <>Activity in</>}
+            </span>
+
+            <a
+              href={repoUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="activity-repo-link"
+              title={`View ${repoName} on GitHub`}
+            >
+              {repoName}
+              <ExternalLink size={10} />
+            </a>
+
+            <span className="activity-time-tag">
+              {formatEventTime(event.created_at)}
+            </span>
+          </div>
+
+          {/* Event details: PR title, Issue title, or commits */}
+          {event.type === 'PullRequestEvent' && event.payload.pull_request && (
+            <div className="activity-detail-box">
+              <a
+                href={event.payload.pull_request.html_url}
+                target="_blank"
+                rel="noreferrer"
+                className="activity-target-link"
+              >
+                #{event.payload.pull_request.number}: {event.payload.pull_request.title}
+              </a>
+            </div>
+          )}
+
+          {event.type === 'IssuesEvent' && event.payload.issue && (
+            <div className="activity-detail-box">
+              <a
+                href={event.payload.issue.html_url}
+                target="_blank"
+                rel="noreferrer"
+                className="activity-target-link"
+              >
+                #{event.payload.issue.number}: {event.payload.issue.title}
+              </a>
+            </div>
+          )}
+
+          {event.type === 'PushEvent' && event.payload.commits && event.payload.commits.length > 0 && (
+            <div className="activity-commits-block">
+              <div className="activity-commit-row">
+                <code className="commit-sha-micro">
+                  {event.payload.commits[0].sha.slice(0, 7)}
+                </code>
+                <span className="commit-msg-micro">
+                  {event.payload.commits[0].message}
+                </span>
+              </div>
+
+              {event.payload.commits.length > 1 && (
+                <>
+                  {isExpanded &&
+                    event.payload.commits.slice(1).map((c, i) => (
+                      <div key={i} className="activity-commit-row">
+                        <code className="commit-sha-micro">{c.sha.slice(0, 7)}</code>
+                        <span className="commit-msg-micro">{c.message}</span>
+                      </div>
+                    ))}
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedEventId(isExpanded ? null : event.id)
+                    }
+                    className="activity-toggle-commits"
+                  >
+                    {isExpanded ? (
+                      <>
+                        <ChevronUp size={11} /> Hide {event.payload.commits.length - 1} more commits
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown size={11} /> View {event.payload.commits.length - 1} more commits
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <section className={`contribution-section preview-surface ${className}`} aria-label="Contribution and Activity">
@@ -362,172 +533,37 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
             </div>
           ) : (
             <div className="activity-feed-list">
-              {filteredEvents.slice(0, 15).map((event) => {
-                const isExpanded = expandedEventId === event.id;
-                const repoName = event.repo?.name || 'Unknown repo';
-                const repoUrl = `https://github.com/${repoName}`;
+              {/* Top 3 Latest Events */}
+              {topEvents.map(renderEventCard)}
 
-                return (
-                  <div key={event.id} className="activity-event-card">
-                    <div className="activity-event-icon-column">
-                      {event.type === 'PushEvent' && <GitCommit size={14} className="icon-push" />}
-                      {event.type === 'PullRequestEvent' && (
-                        <GitPullRequest size={14} className="icon-pr" />
-                      )}
-                      {(event.type === 'IssuesEvent' || event.type === 'IssueCommentEvent') && (
-                        <CircleDot size={14} className="icon-issue" />
-                      )}
-                      {event.type === 'CreateEvent' && (
-                        <PlusCircle size={14} className="icon-create" />
-                      )}
-                      {event.type === 'WatchEvent' && <Star size={14} className="icon-star" />}
-                      {event.type === 'ForkEvent' && <GitFork size={14} className="icon-fork" />}
-                      {![
-                        'PushEvent',
-                        'PullRequestEvent',
-                        'IssuesEvent',
-                        'IssueCommentEvent',
-                        'CreateEvent',
-                        'WatchEvent',
-                        'ForkEvent',
-                      ].includes(event.type) && <Activity size={14} className="icon-other" />}
+              {/* Collapsible Dropdown Menu for Older Events */}
+              {olderEvents.length > 0 && (
+                <div className="activity-older-events-container">
+                  <button
+                    type="button"
+                    onClick={() => setShowOlderEvents((prev) => !prev)}
+                    className={`activity-older-events-toggle ${showOlderEvents ? 'is-active' : ''}`}
+                    aria-expanded={showOlderEvents}
+                  >
+                    <span>
+                      {showOlderEvents
+                        ? 'Hide older activity'
+                        : `Show older activity (${olderEvents.length} more events)`}
+                    </span>
+                    {showOlderEvents ? (
+                      <ChevronUp size={13} className="older-toggle-chevron" />
+                    ) : (
+                      <ChevronDown size={13} className="older-toggle-chevron" />
+                    )}
+                  </button>
+
+                  {showOlderEvents && (
+                    <div className="activity-older-events-menu">
+                      {olderEvents.map(renderEventCard)}
                     </div>
-
-                    <div className="activity-event-body">
-                      <div className="activity-event-main-line">
-                        <span className="activity-action-label">
-                          {event.type === 'PushEvent' && (
-                            <>
-                              Pushed{' '}
-                              <strong>
-                                {event.payload.commits?.length || event.payload.size || 1}
-                              </strong>{' '}
-                              {event.payload.commits?.length === 1 ? 'commit' : 'commits'} to
-                            </>
-                          )}
-                          {event.type === 'PullRequestEvent' && (
-                            <>
-                              {event.payload.action === 'opened'
-                                ? 'Opened pull request in'
-                                : event.payload.action === 'closed'
-                                ? 'Closed pull request in'
-                                : 'Updated pull request in'}
-                            </>
-                          )}
-                          {event.type === 'IssuesEvent' && (
-                            <>
-                              {event.payload.action === 'opened' ? 'Opened issue in' : 'Updated issue in'}
-                            </>
-                          )}
-                          {event.type === 'IssueCommentEvent' && <>Commented on issue in</>}
-                          {event.type === 'CreateEvent' && (
-                            <>
-                              Created {event.payload.ref_type || 'resource'}{' '}
-                              {event.payload.ref ? `"${event.payload.ref}"` : ''} in
-                            </>
-                          )}
-                          {event.type === 'WatchEvent' && <>Starred repository</>}
-                          {event.type === 'ForkEvent' && <>Forked repository</>}
-                          {![
-                            'PushEvent',
-                            'PullRequestEvent',
-                            'IssuesEvent',
-                            'IssueCommentEvent',
-                            'CreateEvent',
-                            'WatchEvent',
-                            'ForkEvent',
-                          ].includes(event.type) && <>Activity in</>}
-                        </span>
-
-                        <a
-                          href={repoUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="activity-repo-link"
-                          title={`View ${repoName} on GitHub`}
-                        >
-                          {repoName}
-                          <ExternalLink size={10} />
-                        </a>
-
-                        <span className="activity-time-tag">
-                          {formatEventTime(event.created_at)}
-                        </span>
-                      </div>
-
-                      {/* Event details: PR title, Issue title, or commits */}
-                      {event.type === 'PullRequestEvent' && event.payload.pull_request && (
-                        <div className="activity-detail-box">
-                          <a
-                            href={event.payload.pull_request.html_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="activity-target-link"
-                          >
-                            #{event.payload.pull_request.number}: {event.payload.pull_request.title}
-                          </a>
-                        </div>
-                      )}
-
-                      {event.type === 'IssuesEvent' && event.payload.issue && (
-                        <div className="activity-detail-box">
-                          <a
-                            href={event.payload.issue.html_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="activity-target-link"
-                          >
-                            #{event.payload.issue.number}: {event.payload.issue.title}
-                          </a>
-                        </div>
-                      )}
-
-                      {event.type === 'PushEvent' && event.payload.commits && event.payload.commits.length > 0 && (
-                        <div className="activity-commits-block">
-                          <div className="activity-commit-row">
-                            <code className="commit-sha-micro">
-                              {event.payload.commits[0].sha.slice(0, 7)}
-                            </code>
-                            <span className="commit-msg-micro">
-                              {event.payload.commits[0].message}
-                            </span>
-                          </div>
-
-                          {event.payload.commits.length > 1 && (
-                            <>
-                              {isExpanded &&
-                                event.payload.commits.slice(1).map((c, i) => (
-                                  <div key={i} className="activity-commit-row">
-                                    <code className="commit-sha-micro">{c.sha.slice(0, 7)}</code>
-                                    <span className="commit-msg-micro">{c.message}</span>
-                                  </div>
-                                ))}
-
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setExpandedEventId(isExpanded ? null : event.id)
-                                }
-                                className="activity-toggle-commits"
-                              >
-                                {isExpanded ? (
-                                  <>
-                                    <ChevronUp size={11} /> Hide {event.payload.commits.length - 1} more commits
-                                  </>
-                                ) : (
-                                  <>
-                                    <ChevronDown size={11} /> View {event.payload.commits.length - 1} more commits
-                                  </>
-                                )}
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                  )}
+                </div>
+              )}
             </div>
           )}
         </>
