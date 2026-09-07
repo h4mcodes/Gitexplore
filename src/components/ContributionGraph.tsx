@@ -1,9 +1,9 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Activity,
   Calendar,
   ChevronDown,
-  ChevronUp,
   CircleDot,
   ExternalLink,
   Flame,
@@ -130,7 +130,6 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
   const [activeFilter, setActiveFilter] = useState<EventFilterCategory>('all');
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [hoveredDay, setHoveredDay] = useState<DailyActivityItem | null>(null);
-  const [showOlderEvents, setShowOlderEvents] = useState<boolean>(false);
 
   const loadActivity = () => {
     if (!username) return;
@@ -164,9 +163,6 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
       return data.events.filter((e) => e.type === 'WatchEvent' || e.type === 'ForkEvent');
     return data.events;
   }, [data, activeFilter]);
-
-  const topEvents = useMemo(() => filteredEvents.slice(0, 3), [filteredEvents]);
-  const olderEvents = useMemo(() => filteredEvents.slice(3), [filteredEvents]);
 
   const renderEventCard = (event: GithubEvent) => {
     const isExpanded = expandedEventId === event.id;
@@ -301,13 +297,38 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
 
               {event.payload.commits.length > 1 && (
                 <>
-                  {isExpanded &&
-                    event.payload.commits.slice(1).map((c, i) => (
-                      <div key={i} className="activity-commit-row">
-                        <code className="commit-sha-micro">{c.sha.slice(0, 7)}</code>
-                        <span className="commit-msg-micro">{c.message}</span>
-                      </div>
-                    ))}
+                  <AnimatePresence initial={false}>
+                    {isExpanded && (
+                      <motion.div
+                        key="expanded-commits"
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{
+                          opacity: 1,
+                          height: 'auto',
+                          transition: {
+                            height: { duration: 0.2, ease: [0.16, 1, 0.3, 1] },
+                            opacity: { duration: 0.16, delay: 0.02 },
+                          },
+                        }}
+                        exit={{
+                          opacity: 0,
+                          height: 0,
+                          transition: {
+                            opacity: { duration: 0.08 },
+                            height: { duration: 0.16, ease: [0.16, 1, 0.3, 1] },
+                          },
+                        }}
+                        style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 4 }}
+                      >
+                        {event.payload.commits.slice(1).map((c, i) => (
+                          <div key={i} className="activity-commit-row">
+                            <code className="commit-sha-micro">{c.sha.slice(0, 7)}</code>
+                            <span className="commit-msg-micro">{c.message}</span>
+                          </div>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
                   <button
                     type="button"
@@ -316,15 +337,16 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
                     }
                     className="activity-toggle-commits"
                   >
-                    {isExpanded ? (
-                      <>
-                        <ChevronUp size={11} /> Hide {event.payload.commits.length - 1} more commits
-                      </>
-                    ) : (
-                      <>
-                        <ChevronDown size={11} /> View {event.payload.commits.length - 1} more commits
-                      </>
-                    )}
+                    <ChevronDown
+                      size={11}
+                      style={{
+                        transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.24s cubic-bezier(0.16, 1, 0.3, 1)',
+                      }}
+                    />
+                    {isExpanded
+                      ? `Hide ${event.payload.commits.length - 1} more commits`
+                      : `View ${event.payload.commits.length - 1} more commits`}
                   </button>
                 </>
               )}
@@ -537,38 +559,7 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
             </div>
           ) : (
             <div className="activity-feed-list">
-              {/* Top 3 Latest Events */}
-              {topEvents.map(renderEventCard)}
-
-              {/* Older Events rendered directly in sequence when expanded */}
-              {showOlderEvents && olderEvents.length > 0 && (
-                <div className="activity-older-events-list">
-                  {olderEvents.map(renderEventCard)}
-                </div>
-              )}
-
-              {/* Collapsible Dropdown Toggle Button at the bottom */}
-              {olderEvents.length > 0 && (
-                <div className="activity-older-events-container">
-                  <button
-                    type="button"
-                    onClick={() => setShowOlderEvents((prev) => !prev)}
-                    className={`activity-older-events-toggle ${showOlderEvents ? 'is-active' : ''}`}
-                    aria-expanded={showOlderEvents}
-                  >
-                    <span>
-                      {showOlderEvents
-                        ? 'Hide older activity'
-                        : `Show older activity (${olderEvents.length} more events)`}
-                    </span>
-                    {showOlderEvents ? (
-                      <ChevronUp size={13} className="older-toggle-chevron" />
-                    ) : (
-                      <ChevronDown size={13} className="older-toggle-chevron" />
-                    )}
-                  </button>
-                </div>
-              )}
+              {filteredEvents.map(renderEventCard)}
             </div>
           )}
         </>
