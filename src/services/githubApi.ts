@@ -5,6 +5,7 @@ import type {
   DailyActivityItem,
   GithubBranch,
   GithubCommit,
+  GithubContributionDay,
   GithubEvent,
   GithubRepository,
   GithubUser,
@@ -313,11 +314,34 @@ export async function fetchGithubUserEvents(
   }
 }
 
+export async function fetchGithubContributions(username: string): Promise<GithubContributionDay[]> {
+  try {
+    const response = await fetch(
+      `https://github-contributions-api.jogruber.de/v4/${encodeURIComponent(username)}?y=last`,
+      {
+        headers: { Accept: 'application/json' },
+      }
+    );
+    if (!response.ok) return [];
+    const data = await response.json();
+    if (data && Array.isArray(data.contributions)) {
+      return data.contributions;
+    }
+  } catch {
+    // Graceful fallback to events
+  }
+  return [];
+}
+
 /**
- * Transforms real GitHub events into a processed activity model with statistics,
+ * Transforms real GitHub events and full-year contribution data into a processed activity model with statistics,
  * aggregated daily intensities, and calendar grid layout.
  */
-export function processUserActivity(events: GithubEvent[], weeksCount: number = 52): ProcessedActivity {
+export function processUserActivity(
+  events: GithubEvent[],
+  contributions: GithubContributionDay[] = [],
+  weeksCount: number = 52
+): ProcessedActivity {
   const stats: ActivityStats = {
     totalEvents: events.length,
     pushEvents: 0,
@@ -330,6 +354,13 @@ export function processUserActivity(events: GithubEvent[], weeksCount: number = 
   };
 
   const dayCounts: Record<string, number> = {};
+
+  // Initialize day counts from full-year contribution calendar
+  for (const contrib of contributions) {
+    if (contrib && typeof contrib.date === 'string' && typeof contrib.count === 'number') {
+      dayCounts[contrib.date] = contrib.count;
+    }
+  }
 
   for (const event of events) {
     const dateKey = event.created_at.split('T')[0];
@@ -364,7 +395,8 @@ export function processUserActivity(events: GithubEvent[], weeksCount: number = 
         break;
     }
 
-    dayCounts[dateKey] = (dayCounts[dateKey] || 0) + weight;
+    // Ensure day count is at least the live events weight
+    dayCounts[dateKey] = Math.max(dayCounts[dateKey] || 0, weight);
   }
 
   // Construct calendar grid of weeksCount columns × 7 days

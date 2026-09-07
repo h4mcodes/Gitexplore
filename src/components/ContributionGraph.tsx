@@ -15,7 +15,11 @@ import {
   Star,
   Zap,
 } from 'lucide-react';
-import { fetchGithubUserEvents, processUserActivity } from '../services/githubApi';
+import {
+  fetchGithubContributions,
+  fetchGithubUserEvents,
+  processUserActivity,
+} from '../services/githubApi';
 import type { DailyActivityItem, GithubEvent, ProcessedActivity } from '../types/github';
 
 interface ContributionGraphProps {
@@ -134,9 +138,12 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
   const loadActivity = () => {
     if (!username) return;
     setStatus('loading');
-    fetchGithubUserEvents(username, 1, 100)
-      .then((events) => {
-        const processed = processUserActivity(events, 52);
+    Promise.all([
+      fetchGithubUserEvents(username, 1, 100).catch(() => []),
+      fetchGithubContributions(username).catch(() => []),
+    ])
+      .then(([events, contributions]) => {
+        const processed = processUserActivity(events, contributions, 52);
         setData(processed);
         setStatus('ready');
       })

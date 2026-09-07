@@ -183,6 +183,17 @@ export interface DailyActivityItem {
   level: 0 | 1 | 2 | 3 | 4;
 }
 
+export interface GithubContributionDay {
+  date: string;
+  count: number;
+  level: 0 | 1 | 2 | 3 | 4;
+}
+
+export interface GithubYearContributions {
+  total: Record<string, number>;
+  contributions: GithubContributionDay[];
+}
+
 export interface MonthSectionData {
   monthName: string;
   year: number;
