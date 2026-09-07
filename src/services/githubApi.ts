@@ -8,6 +8,7 @@ import type {
   GithubEvent,
   GithubRepository,
   GithubUser,
+  MonthSectionData,
   ProcessedActivity,
 } from '../types/github';
 
@@ -316,7 +317,7 @@ export async function fetchGithubUserEvents(
  * Transforms real GitHub events into a processed activity model with statistics,
  * aggregated daily intensities, and calendar grid layout.
  */
-export function processUserActivity(events: GithubEvent[], weeksCount: number = 28): ProcessedActivity {
+export function processUserActivity(events: GithubEvent[], weeksCount: number = 52): ProcessedActivity {
   const stats: ActivityStats = {
     totalEvents: events.length,
     pushEvents: 0,
@@ -370,7 +371,6 @@ export function processUserActivity(events: GithubEvent[], weeksCount: number = 
   const today = new Date();
   const dailyGrid: DailyActivityItem[][] = [];
   const monthLabels: { label: string; colIndex: number }[] = [];
-  let lastMonth = -1;
   let mostActiveDay: { date: string; count: number } | null = null;
   let totalRecentContributions = 0;
 
@@ -388,33 +388,14 @@ export function processUserActivity(events: GithubEvent[], weeksCount: number = 
 
   for (let col = 0; col < weeksCount; col++) {
     const week: DailyActivityItem[] = [];
+
     for (let row = 0; row < 7; row++) {
       const year = cursor.getFullYear();
       const month = String(cursor.getMonth() + 1).padStart(2, '0');
       const day = String(cursor.getDate()).padStart(2, '0');
       const dateKey = `${year}-${month}-${day}`;
 
-      const currentMonth = cursor.getMonth();
-      if (row === 0 && currentMonth !== lastMonth && col > 0 && col < weeksCount - 1) {
-        monthLabels.push({
-          label: cursor.toLocaleString('en', { month: 'short' }),
-          colIndex: col,
-        });
-        lastMonth = currentMonth;
-      } else if (col === 0 && row === 0) {
-        monthLabels.push({
-          label: cursor.toLocaleString('en', { month: 'short' }),
-          colIndex: 0,
-        });
-        lastMonth = currentMonth;
-      }
-
       const count = dayCounts[dateKey] || 0;
-      totalRecentContributions += count;
-
-      if (count > 0 && (!mostActiveDay || count > mostActiveDay.count)) {
-        mostActiveDay = { date: dateKey, count };
-      }
 
       let level: 0 | 1 | 2 | 3 | 4 = 0;
       if (count >= 8) level = 4;
@@ -430,13 +411,79 @@ export function processUserActivity(events: GithubEvent[], weeksCount: number = 
 
       cursor.setDate(cursor.getDate() + 1);
     }
+
     dailyGrid.push(week);
+  }
+
+  // Construct 12 distinct calendar month sections (each having 28 to 31 day boxes)
+  const monthSections: MonthSectionData[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const targetDate = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    const year = targetDate.getFullYear();
+    const monthIndex = targetDate.getMonth();
+    const monthName = targetDate.toLocaleString('en', { month: 'short' });
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+    const firstDayWeekday = new Date(year, monthIndex, 1).getDay(); // 0 is Sunday, 6 is Saturday
+
+    const columns: (DailyActivityItem | null)[][] = [];
+    let currentColumn: (DailyActivityItem | null)[] = [];
+
+    // Fill leading empty days in first week column
+    for (let r = 0; r < firstDayWeekday; r++) {
+      currentColumn.push(null);
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const monthStr = String(monthIndex + 1).padStart(2, '0');
+      const dayStr = String(d).padStart(2, '0');
+      const dateKey = `${year}-${monthStr}-${dayStr}`;
+
+      const count = dayCounts[dateKey] || 0;
+      totalRecentContributions += count;
+
+      if (count > 0 && (!mostActiveDay || count > mostActiveDay.count)) {
+        mostActiveDay = { date: dateKey, count };
+      }
+
+      let level: 0 | 1 | 2 | 3 | 4 = 0;
+      if (count >= 8) level = 4;
+      else if (count >= 5) level = 3;
+      else if (count >= 2) level = 2;
+      else if (count >= 1) level = 1;
+
+      currentColumn.push({
+        date: dateKey,
+        count,
+        level,
+      });
+
+      if (currentColumn.length === 7) {
+        columns.push(currentColumn);
+        currentColumn = [];
+      }
+    }
+
+    // Fill trailing empty days in last week column
+    if (currentColumn.length > 0) {
+      while (currentColumn.length < 7) {
+        currentColumn.push(null);
+      }
+      columns.push(currentColumn);
+    }
+
+    monthSections.push({
+      monthName,
+      year,
+      columns,
+      totalDays: daysInMonth,
+    });
   }
 
   return {
     events,
     stats,
     dailyGrid,
+    monthSections,
     monthLabels,
     totalRecentContributions,
     mostActiveDay,

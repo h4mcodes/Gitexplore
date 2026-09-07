@@ -183,10 +183,18 @@ export interface DailyActivityItem {
   level: 0 | 1 | 2 | 3 | 4;
 }
 
+export interface MonthSectionData {
+  monthName: string;
+  year: number;
+  columns: (DailyActivityItem | null)[][];
+  totalDays: number;
+}
+
 export interface ProcessedActivity {
   events: GithubEvent[];
   stats: ActivityStats;
   dailyGrid: DailyActivityItem[][];
+  monthSections: MonthSectionData[];
   monthLabels: { label: string; colIndex: number }[];
   totalRecentContributions: number;
   mostActiveDay: { date: string; count: number } | null;

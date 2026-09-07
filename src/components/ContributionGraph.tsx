@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   Calendar,
@@ -13,7 +13,6 @@ import {
   PlusCircle,
   RotateCw,
   Star,
-  Tag,
   Zap,
 } from 'lucide-react';
 import { fetchGithubUserEvents, processUserActivity } from '../services/githubApi';
@@ -138,7 +137,7 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
     setStatus('loading');
     fetchGithubUserEvents(username, 1, 100)
       .then((events) => {
-        const processed = processUserActivity(events, 28);
+        const processed = processUserActivity(events, 52);
         setData(processed);
         setStatus('ready');
       })
@@ -406,7 +405,7 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
             <div className="activity-matrix-top">
               <span className="activity-matrix-title">
                 <Calendar size={13} />
-                Recent 28-Week Activity Rhythm
+                Activity Rhythm (52 Weeks)
               </span>
               <div className="activity-matrix-legend">
                 <span>Less</span>
@@ -420,41 +419,46 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
             </div>
 
             <div className="graph-wrap matrix-scroll">
-              <div className="day-labels">
-                <span>Mon</span>
-                <span>Wed</span>
-                <span>Fri</span>
+              <div className="day-labels-grid" aria-hidden="true">
+                <span className="day-label-blank" />
+                <span className="day-label-text">Mon</span>
+                <span className="day-label-blank" />
+                <span className="day-label-text">Wed</span>
+                <span className="day-label-blank" />
+                <span className="day-label-text">Fri</span>
+                <span className="day-label-blank" />
               </div>
-              <div className="graph">
-                <div className="month-labels">
-                  {data.monthLabels.map((m, idx) => (
-                    <span
-                      key={idx}
-                      style={{
-                        position: 'absolute',
-                        left: `${(m.colIndex / data.dailyGrid.length) * 100}%`,
-                      }}
-                    >
-                      {m.label}
-                    </span>
-                  ))}
-                </div>
-                <div className="graph-grid">
-                  {data.dailyGrid.map((column, x) => (
-                    <div className="graph-column" key={x}>
-                      {column.map((item, y) => (
-                        <span
-                          key={y}
-                          className={`level-${item.level} ${
-                            hoveredDay?.date === item.date ? 'is-highlighted' : ''
-                          }`}
-                          onMouseEnter={() => setHoveredDay(item)}
-                          onMouseLeave={() => setHoveredDay(null)}
-                          title={formatDayTooltip(item)}
-                          aria-label={formatDayTooltip(item)}
-                        />
-                      ))}
-                    </div>
+              <div className="graph-matrix-container">
+                <div className="month-sections-track">
+                  {data.monthSections.map((section, sIdx) => (
+                    <Fragment key={`${section.year}-${section.monthName}-${sIdx}`}>
+                      {sIdx > 0 && <div className="month-section-divider" aria-hidden="true" />}
+                      <div className="month-section-block" style={{ flex: section.columns.length }}>
+                        <span className="month-section-title">{section.monthName}</span>
+                        <div className="month-section-grid">
+                          {section.columns.map((column, cIdx) => (
+                            <div className="graph-column" key={cIdx}>
+                              {column.map((item, rIdx) =>
+                                item ? (
+                                  <span
+                                    key={rIdx}
+                                    className={`level-${item.level} ${
+                                      hoveredDay?.date === item.date ? 'is-highlighted' : ''
+                                    }`}
+                                    onMouseEnter={() => setHoveredDay(item)}
+                                    onMouseLeave={() => setHoveredDay(null)}
+                                    title={formatDayTooltip(item)}
+                                    aria-label={formatDayTooltip(item)}
+                                  />
+                                ) : (
+                                  <span key={rIdx} className="level-empty" aria-hidden="true" />
+                                )
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </Fragment>
                   ))}
                 </div>
               </div>
@@ -536,7 +540,14 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
               {/* Top 3 Latest Events */}
               {topEvents.map(renderEventCard)}
 
-              {/* Collapsible Dropdown Menu for Older Events */}
+              {/* Older Events rendered directly in sequence when expanded */}
+              {showOlderEvents && olderEvents.length > 0 && (
+                <div className="activity-older-events-list">
+                  {olderEvents.map(renderEventCard)}
+                </div>
+              )}
+
+              {/* Collapsible Dropdown Toggle Button at the bottom */}
               {olderEvents.length > 0 && (
                 <div className="activity-older-events-container">
                   <button
@@ -556,12 +567,6 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
                       <ChevronDown size={13} className="older-toggle-chevron" />
                     )}
                   </button>
-
-                  {showOlderEvents && (
-                    <div className="activity-older-events-menu">
-                      {olderEvents.map(renderEventCard)}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
