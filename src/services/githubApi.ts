@@ -6,6 +6,7 @@ import type {
   GithubBranch,
   GithubCommit,
   GithubCommitDetail,
+  GithubComparisonResult,
   GithubContributionDay,
   GithubEvent,
   GithubRepository,
@@ -205,6 +206,37 @@ export async function fetchGithubCommitDetail(
     const data: unknown = await response.json();
     if (!isGithubCommit(data)) throw new GithubApiError('unexpected');
     return data as GithubCommitDetail;
+  } catch (error) {
+    if (error instanceof GithubApiError) throw error;
+    throw new GithubApiError('unexpected');
+  }
+}
+
+export async function fetchGithubCompare(
+  owner: string,
+  repo: string,
+  base: string,
+  head: string
+): Promise<GithubComparisonResult> {
+  let response: Response;
+  try {
+    response = await fetch(
+      `${GITHUB_REPOS_API_URL}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
+      {
+        headers: { Accept: 'application/vnd.github+json' },
+      }
+    );
+  } catch {
+    throw new GithubApiError('network');
+  }
+
+  if (response.status === 404) throw new GithubApiError('not-found');
+  if (!response.ok) throw new GithubApiError('unexpected');
+
+  try {
+    const data: unknown = await response.json();
+    if (!data || typeof data !== 'object') throw new GithubApiError('unexpected');
+    return data as GithubComparisonResult;
   } catch (error) {
     if (error instanceof GithubApiError) throw error;
     throw new GithubApiError('unexpected');

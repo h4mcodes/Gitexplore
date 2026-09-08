@@ -103,6 +103,22 @@ export interface GithubCommitDetail extends GithubCommit {
   files?: GithubCommitFile[];
 }
 
+export interface GithubComparisonResult {
+  url: string;
+  html_url: string;
+  permalink_url: string;
+  diff_url: string;
+  patch_url: string;
+  base_commit: GithubCommit;
+  merge_base_commit: GithubCommit;
+  status: 'ahead' | 'behind' | 'identical' | 'diverged';
+  ahead_by: number;
+  behind_by: number;
+  total_commits: number;
+  commits: GithubCommit[];
+  files: GithubCommitFile[];
+}
+
 export interface CommitNodeAuthor {
   name: string;
   email: string | null;

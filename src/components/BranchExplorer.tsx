@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ExternalLink, GitBranch, GitCommit, History, RotateCw, Search, ShieldCheck, X } from 'lucide-react';
+import { ArrowLeftRight, ExternalLink, GitBranch, GitCommit, History, RotateCw, Search, ShieldCheck, X } from 'lucide-react';
 import { fetchGithubBranches } from '../services/githubApi';
 import type { GithubBranch } from '../types/github';
 import { CommitHistory } from './CommitHistory';
+import { BranchCompare } from './BranchCompare';
+import { CommitInspection } from './CommitInspection';
 
 interface BranchExplorerProps {
   owner: string;
@@ -17,6 +19,8 @@ export function BranchExplorer({ owner, repo, defaultBranch, fullName, onClose }
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [query, setQuery] = useState('');
   const [activeBranchForCommits, setActiveBranchForCommits] = useState<string | null>(null);
+  const [compareState, setCompareState] = useState<{ base: string; head: string } | null>(null);
+  const [inspectingSha, setInspectingSha] = useState<string | null>(null);
 
   const loadBranches = () => {
     setStatus('loading');
@@ -47,6 +51,37 @@ export function BranchExplorer({ owner, repo, defaultBranch, fullName, onClose }
     return branches.filter((b) => b.name.toLowerCase().includes(q));
   }, [branches, query]);
 
+  if (compareState) {
+    if (inspectingSha) {
+      return (
+        <CommitInspection
+          owner={owner}
+          repo={repo}
+          sha={inspectingSha}
+          branch={compareState.head}
+          fullName={fullName}
+          onBack={() => setInspectingSha(null)}
+          onSelectSha={(sha) => setInspectingSha(sha)}
+          onClose={onClose}
+        />
+      );
+    }
+
+    return (
+      <BranchCompare
+        owner={owner}
+        repo={repo}
+        fullName={fullName}
+        branches={branches}
+        initialBase={compareState.base}
+        initialHead={compareState.head}
+        onBack={() => setCompareState(null)}
+        onClose={onClose}
+        onInspectCommit={(sha) => setInspectingSha(sha)}
+      />
+    );
+  }
+
   if (activeBranchForCommits) {
     return (
       <CommitHistory
@@ -71,6 +106,23 @@ export function BranchExplorer({ owner, repo, defaultBranch, fullName, onClose }
           {status === 'ready' && <span className="branch-count-badge">{branches.length}</span>}
         </div>
         <div className="branch-header-actions">
+          {branches.length > 1 && (
+            <button
+              type="button"
+              onClick={() =>
+                setCompareState({
+                  base: defaultBranch || branches[0]?.name || 'main',
+                  head: (branches.find((b) => b.name !== defaultBranch)?.name) || branches[0]?.name || 'main',
+                })
+              }
+              className="branch-compare-quick-btn"
+              title="Compare branches"
+              aria-label="Compare branches"
+            >
+              <ArrowLeftRight size={11} />
+              <span>Compare</span>
+            </button>
+          )}
           {defaultBranch && (
             <button
               type="button"
@@ -175,6 +227,24 @@ export function BranchExplorer({ owner, repo, defaultBranch, fullName, onClose }
                     </div>
 
                     <div className="branch-item-meta">
+                      {branches.length > 1 && !isDefault && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCompareState({
+                              base: defaultBranch || 'main',
+                              head: branch.name,
+                            })
+                          }
+                          className="branch-row-compare-btn"
+                          title={`Compare ${branch.name} with ${defaultBranch || 'main'}`}
+                          aria-label={`Compare ${branch.name} with ${defaultBranch || 'main'}`}
+                        >
+                          <ArrowLeftRight size={11} />
+                          <span>Compare</span>
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => setActiveBranchForCommits(branch.name)}
