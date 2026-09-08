@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowLeft,
   Check,
@@ -19,6 +20,7 @@ import {
 } from 'lucide-react';
 import { fetchGithubCommitDetail } from '../services/githubApi';
 import type { GithubCommitDetail, CommitRelationshipGraph } from '../types/github';
+import { DiffViewer } from './DiffViewer';
 
 interface CommitInspectionProps {
   owner: string;
@@ -70,6 +72,7 @@ export function CommitInspection({
   const [detail, setDetail] = useState<GithubCommitDetail | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [copiedSha, setCopiedSha] = useState(false);
+  const [showCodeModal, setShowCodeModal] = useState(false);
 
   const loadCommitDetail = (targetSha: string) => {
     setStatus('loading');
@@ -86,7 +89,18 @@ export function CommitInspection({
 
   useEffect(() => {
     loadCommitDetail(sha);
+    setShowCodeModal(false);
   }, [owner, repo, sha]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showCodeModal) {
+        setShowCodeModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showCodeModal]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -159,6 +173,18 @@ export function CommitInspection({
         </div>
 
         <div className="commit-inspect-nav-right">
+          {files.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowCodeModal(true)}
+              className="show-code-nav-btn"
+              title="Open full code diff in window"
+            >
+              <FileCode size={12} />
+              <span>Show Code ({files.length})</span>
+            </button>
+          )}
+
           {detail?.html_url && (
             <a
               href={detail.html_url}
@@ -376,9 +402,23 @@ export function CommitInspection({
 
           {/* Investigation Change Stats Overview */}
           <div className="commit-inspect-card stats-card">
-            <span className="commit-card-subtitle">
-              <FileCode size={11} /> Impact & Changes Overview
-            </span>
+            <div className="stats-header-row">
+              <span className="commit-card-subtitle">
+                <FileCode size={11} /> Impact & Changes Overview
+              </span>
+              {files.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowCodeModal(true)}
+                  className="show-code-primary-btn"
+                  title="Open code diff window"
+                >
+                  <FileCode size={12} />
+                  <span>Show Code ({files.length})</span>
+                </button>
+              )}
+            </div>
+
             <div className="commit-inspect-metrics-row">
               <div className="inspect-metric-pill">
                 <FileText size={12} className="metric-icon" />
@@ -407,14 +447,22 @@ export function CommitInspection({
             </div>
           </div>
 
-          {/* Changed Files List (Milestone 1 foundation for Milestone 2 Diff Investigation) */}
+          {/* Changed Files Overview List */}
           {files.length > 0 && (
             <div className="commit-inspect-card files-card">
               <div className="files-header-row">
                 <span className="commit-card-subtitle">
                   <FileText size={11} /> Changed Files ({files.length})
                 </span>
-                <span className="files-hint-badge">Prepared for diff analysis</span>
+                <button
+                  type="button"
+                  onClick={() => setShowCodeModal(true)}
+                  className="view-code-action-btn"
+                  title="Open code diff window"
+                >
+                  <FileCode size={11} />
+                  <span>Show Code</span>
+                </button>
               </div>
 
               <ul className="inspect-files-list">
@@ -446,6 +494,28 @@ export function CommitInspection({
                         {file.changes > 0 && file.additions === 0 && file.deletions === 0 && (
                           <span className="file-changes-tag">{file.changes} changes</span>
                         )}
+
+                        <button
+                          type="button"
+                          onClick={() => setShowCodeModal(true)}
+                          className="file-inspect-code-btn"
+                          title={`Open code diff for ${file.filename}`}
+                        >
+                          <FileCode size={10} />
+                          <span>Show Code</span>
+                        </button>
+
+                        {file.blob_url && (
+                          <a
+                            href={file.blob_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="file-ext-link-btn"
+                            title={`Open ${file.filename} on GitHub`}
+                          >
+                            <ExternalLink size={10} />
+                          </a>
+                        )}
                       </div>
                     </li>
                   );
@@ -454,6 +524,73 @@ export function CommitInspection({
             </div>
           )}
         </div>
+      )}
+
+      {/* Full-Screen Code Diff Window Modal Overlay (Rendered in Portal) */}
+      {showCodeModal && detail && typeof document !== 'undefined' && createPortal(
+        <div
+          className="code-diff-modal-backdrop"
+          onClick={() => setShowCodeModal(false)}
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Code diff for commit ${sha.slice(0, 7)}`}
+        >
+          <div
+            className="code-diff-modal-window"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Window Header */}
+            <div className="code-diff-modal-header">
+              <div className="modal-header-left">
+                <div className="modal-title-row">
+                  <FileCode size={15} className="modal-header-icon" />
+                  <span className="modal-header-title">Code Diff Investigation</span>
+                  <span className="modal-sha-pill">
+                    <GitCommit size={11} />
+                    <code>{detail.sha.slice(0, 7)}</code>
+                  </span>
+                  <span className="modal-branch-tag">
+                    <GitBranch size={10} />
+                    {branch}
+                  </span>
+                </div>
+                <div className="modal-commit-message" title={commitTitle}>
+                  {commitTitle}
+                </div>
+              </div>
+
+              <div className="modal-header-right">
+                {detail.html_url && (
+                  <a
+                    href={detail.html_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="modal-open-github-btn"
+                    title="Open full commit on GitHub in new tab"
+                  >
+                    <span>GitHub</span>
+                    <ExternalLink size={11} />
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowCodeModal(false)}
+                  className="modal-close-window-btn"
+                  title="Close code diff window (Esc)"
+                  aria-label="Close code window"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Window Diff Body */}
+            <div className="code-diff-modal-body">
+              <DiffViewer files={files} />
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );
