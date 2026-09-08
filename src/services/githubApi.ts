@@ -5,6 +5,7 @@ import type {
   DailyActivityItem,
   GithubBranch,
   GithubCommit,
+  GithubCommitDetail,
   GithubContributionDay,
   GithubEvent,
   GithubRepository,
@@ -174,6 +175,36 @@ export async function fetchGithubCommits(
     const data: unknown = await response.json();
     if (!Array.isArray(data) || !data.every(isGithubCommit)) throw new GithubApiError('unexpected');
     return data;
+  } catch (error) {
+    if (error instanceof GithubApiError) throw error;
+    throw new GithubApiError('unexpected');
+  }
+}
+
+export async function fetchGithubCommitDetail(
+  owner: string,
+  repo: string,
+  sha: string
+): Promise<GithubCommitDetail> {
+  let response: Response;
+  try {
+    response = await fetch(
+      `${GITHUB_REPOS_API_URL}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${encodeURIComponent(sha)}`,
+      {
+        headers: { Accept: 'application/vnd.github+json' },
+      }
+    );
+  } catch {
+    throw new GithubApiError('network');
+  }
+
+  if (response.status === 404) throw new GithubApiError('not-found');
+  if (!response.ok) throw new GithubApiError('unexpected');
+
+  try {
+    const data: unknown = await response.json();
+    if (!isGithubCommit(data)) throw new GithubApiError('unexpected');
+    return data as GithubCommitDetail;
   } catch (error) {
     if (error instanceof GithubApiError) throw error;
     throw new GithubApiError('unexpected');

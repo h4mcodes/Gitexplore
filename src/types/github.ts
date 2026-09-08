@@ -78,6 +78,31 @@ export interface GithubCommit {
   parents: GithubCommitParent[];
 }
 
+export interface GithubCommitStats {
+  total: number;
+  additions: number;
+  deletions: number;
+}
+
+export interface GithubCommitFile {
+  sha?: string;
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  blob_url?: string;
+  raw_url?: string;
+  contents_url?: string;
+  patch?: string;
+  previous_filename?: string;
+}
+
+export interface GithubCommitDetail extends GithubCommit {
+  stats?: GithubCommitStats;
+  files?: GithubCommitFile[];
+}
+
 export interface CommitNodeAuthor {
   name: string;
   email: string | null;
