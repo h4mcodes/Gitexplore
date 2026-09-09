@@ -18,7 +18,7 @@ import {
   User,
   X,
 } from 'lucide-react';
-import { fetchGithubCommitDetail } from '../services/githubApi';
+import { fetchGithubCommitDetail, GithubApiError } from '../services/githubApi';
 import type { GithubCommitDetail, CommitRelationshipGraph } from '../types/github';
 import { DiffViewer } from './DiffViewer';
 
@@ -70,20 +70,30 @@ export function CommitInspection({
   onClose,
 }: CommitInspectionProps) {
   const [detail, setDetail] = useState<GithubCommitDetail | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'rate-limit' | 'error'>('loading');
+  const [rateLimitTime, setRateLimitTime] = useState<string | null>(null);
   const [copiedSha, setCopiedSha] = useState(false);
   const [showCodeModal, setShowCodeModal] = useState(false);
 
-  const loadCommitDetail = (targetSha: string) => {
+  const loadCommitDetail = (targetSha: string, bypassCache = false) => {
     setStatus('loading');
-    fetchGithubCommitDetail(owner, repo, targetSha)
+    fetchGithubCommitDetail(owner, repo, targetSha, { bypassCache })
       .then((data) => {
         setDetail(data);
         setStatus('ready');
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         setDetail(null);
-        setStatus('error');
+        if (err instanceof GithubApiError && err.kind === 'rate-limit') {
+          setStatus('rate-limit');
+          setRateLimitTime(
+            err.rateLimitResetDate
+              ? err.rateLimitResetDate.toLocaleTimeString()
+              : null
+          );
+        } else {
+          setStatus('error');
+        }
       });
   };
 
@@ -226,12 +236,25 @@ export function CommitInspection({
         </div>
       )}
 
+      {status === 'rate-limit' && (
+        <div className="commit-error-box">
+          <p>GitHub API rate limit reached (60 req/hr). {rateLimitTime ? `Resets at ${rateLimitTime}.` : 'Please wait a moment.'}</p>
+          <button
+            type="button"
+            onClick={() => loadCommitDetail(sha, true)}
+            className="commit-retry-btn"
+          >
+            <RotateCw size={12} /> Retry Investigation
+          </button>
+        </div>
+      )}
+
       {status === 'error' && (
         <div className="commit-error-box">
           <p>Failed to retrieve detailed information for commit <code>{sha.slice(0, 7)}</code>.</p>
           <button
             type="button"
-            onClick={() => loadCommitDetail(sha)}
+            onClick={() => loadCommitDetail(sha, true)}
             className="commit-retry-btn"
           >
             <RotateCw size={12} /> Retry Investigation

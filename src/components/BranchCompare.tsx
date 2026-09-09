@@ -17,7 +17,7 @@ import {
   RotateCw,
   X,
 } from 'lucide-react';
-import { fetchGithubCompare } from '../services/githubApi';
+import { fetchGithubCompare, GithubApiError } from '../services/githubApi';
 import type { GithubBranch, GithubComparisonResult } from '../types/github';
 import { DiffViewer } from './DiffViewer';
 
@@ -71,22 +71,32 @@ export function BranchCompare({
   const [base, setBase] = useState(initialBase);
   const [head, setHead] = useState(initialHead);
   const [comparison, setComparison] = useState<GithubComparisonResult | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'rate-limit' | 'error'>('loading');
+  const [rateLimitTime, setRateLimitTime] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'commits' | 'files'>('commits');
   const [showCodeModal, setShowCodeModal] = useState(false);
   const [copiedSha, setCopiedSha] = useState<string | null>(null);
 
-  const runComparison = (b: string, h: string) => {
+  const runComparison = (b: string, h: string, bypassCache = false) => {
     if (!b || !h) return;
     setStatus('loading');
-    fetchGithubCompare(owner, repo, b, h)
+    fetchGithubCompare(owner, repo, b, h, { bypassCache })
       .then((data) => {
         setComparison(data);
         setStatus('ready');
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         setComparison(null);
-        setStatus('error');
+        if (err instanceof GithubApiError && err.kind === 'rate-limit') {
+          setStatus('rate-limit');
+          setRateLimitTime(
+            err.rateLimitResetDate
+              ? err.rateLimitResetDate.toLocaleTimeString()
+              : null
+          );
+        } else {
+          setStatus('error');
+        }
       });
   };
 
@@ -275,6 +285,22 @@ export function BranchCompare({
         </div>
       )}
 
+      {/* Rate Limit View */}
+      {status === 'rate-limit' && (
+        <div className="commit-error-box">
+          <p>
+            GitHub API rate limit reached (60 req/hr). {rateLimitTime ? `Resets at ${rateLimitTime}.` : 'Please wait a moment.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => runComparison(base, head, true)}
+            className="commit-retry-btn"
+          >
+            <RotateCw size={12} /> Retry Comparison
+          </button>
+        </div>
+      )}
+
       {/* Error View */}
       {status === 'error' && (
         <div className="commit-error-box">
@@ -283,7 +309,7 @@ export function BranchCompare({
           </p>
           <button
             type="button"
-            onClick={() => runComparison(base, head)}
+            onClick={() => runComparison(base, head, true)}
             className="commit-retry-btn"
           >
             <RotateCw size={12} /> Retry Comparison

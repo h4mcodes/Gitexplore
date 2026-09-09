@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeftRight, ExternalLink, GitBranch, GitCommit, History, RotateCw, Search, ShieldCheck, X } from 'lucide-react';
-import { fetchGithubBranches } from '../services/githubApi';
+import { fetchGithubBranches, GithubApiError } from '../services/githubApi';
 import type { GithubBranch } from '../types/github';
 import { CommitHistory } from './CommitHistory';
 import { BranchCompare } from './BranchCompare';
@@ -16,15 +16,16 @@ interface BranchExplorerProps {
 
 export function BranchExplorer({ owner, repo, defaultBranch, fullName, onClose }: BranchExplorerProps) {
   const [branches, setBranches] = useState<GithubBranch[]>([]);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'rate-limit' | 'error'>('loading');
+  const [rateLimitTime, setRateLimitTime] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [activeBranchForCommits, setActiveBranchForCommits] = useState<string | null>(null);
   const [compareState, setCompareState] = useState<{ base: string; head: string } | null>(null);
   const [inspectingSha, setInspectingSha] = useState<string | null>(null);
 
-  const loadBranches = () => {
+  const loadBranches = (bypassCache = false) => {
     setStatus('loading');
-    fetchGithubBranches(owner, repo)
+    fetchGithubBranches(owner, repo, { bypassCache })
       .then((data) => {
         // Sort default branch first, then alphabetically
         const sorted = [...data].sort((a, b) => {
@@ -35,9 +36,18 @@ export function BranchExplorer({ owner, repo, defaultBranch, fullName, onClose }
         setBranches(sorted);
         setStatus('ready');
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         setBranches([]);
-        setStatus('error');
+        if (err instanceof GithubApiError && err.kind === 'rate-limit') {
+          setStatus('rate-limit');
+          setRateLimitTime(
+            err.rateLimitResetDate
+              ? err.rateLimitResetDate.toLocaleTimeString()
+              : null
+          );
+        } else {
+          setStatus('error');
+        }
       });
   };
 
@@ -166,10 +176,19 @@ export function BranchExplorer({ owner, repo, defaultBranch, fullName, onClose }
         </div>
       )}
 
+      {status === 'rate-limit' && (
+        <div className="branch-error-box">
+          <p>GitHub API rate limit reached (60 req/hr). {rateLimitTime ? `Resets at ${rateLimitTime}.` : 'Please wait a moment.'}</p>
+          <button type="button" onClick={() => loadBranches(true)} className="branch-retry-btn">
+            <RotateCw size={12} /> Retry
+          </button>
+        </div>
+      )}
+
       {status === 'error' && (
         <div className="branch-error-box">
           <p>Failed to load branches for this repository.</p>
-          <button type="button" onClick={loadBranches} className="branch-retry-btn">
+          <button type="button" onClick={() => loadBranches(true)} className="branch-retry-btn">
             <RotateCw size={12} /> Retry
           </button>
         </div>

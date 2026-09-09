@@ -18,6 +18,7 @@ import {
 import {
   fetchGithubContributions,
   fetchGithubUserEvents,
+  GithubApiError,
   processUserActivity,
 } from '../services/githubApi';
 import type { DailyActivityItem, GithubEvent, ProcessedActivity } from '../types/github';
@@ -78,28 +79,31 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
     return null;
   }
 
-  // Live profile activity mode
   const [data, setData] = useState<ProcessedActivity | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'rate-limit' | 'error'>('loading');
   const [activeFilter, setActiveFilter] = useState<EventFilterCategory>('all');
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
   const [hoveredDay, setHoveredDay] = useState<DailyActivityItem | null>(null);
 
-  const loadActivity = () => {
+  const loadActivity = (bypassCache = false) => {
     if (!username) return;
     setStatus('loading');
     Promise.all([
-      fetchGithubUserEvents(username, 1, 100).catch(() => []),
-      fetchGithubContributions(username).catch(() => []),
+      fetchGithubUserEvents(username, 1, 100, { bypassCache }),
+      fetchGithubContributions(username, { bypassCache }),
     ])
       .then(([events, contributions]) => {
         const processed = processUserActivity(events, contributions, 52);
         setData(processed);
         setStatus('ready');
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         setData(null);
-        setStatus('error');
+        if (err instanceof GithubApiError && err.kind === 'rate-limit') {
+          setStatus('rate-limit');
+        } else {
+          setStatus('error');
+        }
       });
   };
 
@@ -366,11 +370,21 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
         </div>
       )}
 
+      {/* Rate Limit State */}
+      {status === 'rate-limit' && (
+        <div className="contribution-error-box">
+          <p>GitHub API rate limit reached (60 req/hr). Please wait a moment.</p>
+          <button type="button" onClick={() => loadActivity(true)} className="contribution-retry-btn">
+            <RotateCw size={13} /> Retry Activity
+          </button>
+        </div>
+      )}
+
       {/* Error State */}
       {status === 'error' && (
         <div className="contribution-error-box">
           <p>Failed to load activity stream for @{username}.</p>
-          <button type="button" onClick={loadActivity} className="contribution-retry-btn">
+          <button type="button" onClick={() => loadActivity(true)} className="contribution-retry-btn">
             <RotateCw size={13} /> Retry Activity
           </button>
         </div>

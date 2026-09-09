@@ -18,10 +18,203 @@ import type {
 const GITHUB_API_URL = 'https://api.github.com/users';
 const GITHUB_REPOS_API_URL = 'https://api.github.com/repos';
 
+export interface GithubRateLimitInfo {
+  limit: number;
+  remaining: number;
+  resetEpochSeconds: number;
+  resetDate: Date;
+  used?: number;
+}
+
+export type GithubApiErrorKind = 'not-found' | 'rate-limit' | 'network' | 'unexpected' | 'empty';
+
 export class GithubApiError extends Error {
-  constructor(public readonly kind: 'not-found' | 'unexpected' | 'network') {
-    super(kind);
+  constructor(
+    public readonly kind: GithubApiErrorKind,
+    public readonly status?: number,
+    public readonly rateLimitResetDate?: Date,
+    public readonly customMessage?: string
+  ) {
+    super(customMessage || kind);
     this.name = 'GithubApiError';
+  }
+}
+
+export interface RequestOptions {
+  bypassCache?: boolean;
+  ttlMs?: number;
+}
+
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  ttlMs: number;
+}
+
+export const CACHE_TTL = {
+  USER_PROFILE: 5 * 60 * 1000,      // 5 minutes
+  REPOSITORIES: 3 * 60 * 1000,      // 3 minutes
+  BRANCHES: 2 * 60 * 1000,          // 2 minutes
+  COMMITS_LIST: 2 * 60 * 1000,      // 2 minutes
+  COMMIT_DETAIL: 15 * 60 * 1000,    // 15 minutes (commit SHAs are immutable)
+  COMPARE: 3 * 60 * 1000,           // 3 minutes
+  USER_EVENTS: 1 * 60 * 1000,       // 1 minute
+  CONTRIBUTIONS: 10 * 60 * 1000,    // 10 minutes
+} as const;
+
+// In-memory cache store
+const apiCache = new Map<string, CacheEntry<unknown>>();
+
+// In-flight request map for promise sharing / deduplication
+const inFlightRequests = new Map<string, Promise<unknown>>();
+
+// Maximum cache entries to prevent uncontrolled memory usage
+const MAX_CACHE_ENTRIES = 250;
+
+// Centralized rate-limit status tracking
+let latestRateLimit: GithubRateLimitInfo | null = null;
+
+export function getRateLimitStatus(): GithubRateLimitInfo | null {
+  return latestRateLimit;
+}
+
+export function clearApiCache(): void {
+  apiCache.clear();
+  inFlightRequests.clear();
+}
+
+export function invalidateApiCacheKey(keyPrefix: string): void {
+  for (const key of apiCache.keys()) {
+    if (key.startsWith(keyPrefix)) {
+      apiCache.delete(key);
+    }
+  }
+}
+
+function parseRateLimitHeaders(response: Response): GithubRateLimitInfo | null {
+  const limitHeader = response.headers.get('x-ratelimit-limit');
+  const remainingHeader = response.headers.get('x-ratelimit-remaining');
+  const resetHeader = response.headers.get('x-ratelimit-reset');
+  const usedHeader = response.headers.get('x-ratelimit-used');
+
+  if (limitHeader && remainingHeader && resetHeader) {
+    const limit = parseInt(limitHeader, 10);
+    const remaining = parseInt(remainingHeader, 10);
+    const resetEpochSeconds = parseInt(resetHeader, 10);
+    const resetDate = new Date(resetEpochSeconds * 1000);
+    const used = usedHeader ? parseInt(usedHeader, 10) : undefined;
+
+    const info: GithubRateLimitInfo = {
+      limit: isNaN(limit) ? 60 : limit,
+      remaining: isNaN(remaining) ? 0 : remaining,
+      resetEpochSeconds: isNaN(resetEpochSeconds) ? 0 : resetEpochSeconds,
+      resetDate,
+      used,
+    };
+    latestRateLimit = info;
+    return info;
+  }
+  return null;
+}
+
+async function executeGithubRequest<T>(
+  cacheKey: string,
+  url: string,
+  validator: (data: unknown) => data is T,
+  defaultTtlMs: number,
+  options?: RequestOptions
+): Promise<T> {
+  const now = Date.now();
+
+  // 1. Check in-memory cache if not bypassing
+  if (!options?.bypassCache) {
+    const cached = apiCache.get(cacheKey);
+    if (cached && now - cached.timestamp < cached.ttlMs) {
+      return cached.data as T;
+    }
+  }
+
+  // 2. Check if identical request is already pending (Promise Deduplication)
+  const existingPromise = inFlightRequests.get(cacheKey);
+  if (existingPromise) {
+    return existingPromise as Promise<T>;
+  }
+
+  // 3. Check client-side rate-limit block: if remaining is known to be 0 and reset time is in the future
+  if (latestRateLimit && latestRateLimit.remaining === 0 && latestRateLimit.resetDate.getTime() > now) {
+    throw new GithubApiError(
+      'rate-limit',
+      403,
+      latestRateLimit.resetDate,
+      `GitHub API rate limit exceeded. Resets at ${latestRateLimit.resetDate.toLocaleTimeString()}.`
+    );
+  }
+
+  // 4. Create in-flight execution promise
+  const fetchPromise = (async () => {
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: { Accept: 'application/vnd.github+json' },
+      });
+    } catch {
+      throw new GithubApiError('network');
+    }
+
+    const rateLimitInfo = parseRateLimitHeaders(response);
+
+    if (response.status === 404) {
+      throw new GithubApiError('not-found', 404);
+    }
+
+    if (response.status === 403 || (rateLimitInfo && rateLimitInfo.remaining === 0)) {
+      const resetDate = rateLimitInfo?.resetDate || new Date(Date.now() + 60000);
+      throw new GithubApiError(
+        'rate-limit',
+        403,
+        resetDate,
+        `GitHub API rate limit reached. Resets at ${resetDate.toLocaleTimeString()}.`
+      );
+    }
+
+    if (!response.ok) {
+      throw new GithubApiError('unexpected', response.status);
+    }
+
+    let data: unknown;
+    try {
+      data = await response.json();
+    } catch {
+      throw new GithubApiError('unexpected', response.status);
+    }
+
+    if (!validator(data)) {
+      throw new GithubApiError('unexpected');
+    }
+
+    // Cache the valid result
+    const effectiveTtl = options?.ttlMs ?? defaultTtlMs;
+    if (effectiveTtl > 0) {
+      if (apiCache.size >= MAX_CACHE_ENTRIES) {
+        const oldestKey = apiCache.keys().next().value;
+        if (oldestKey) apiCache.delete(oldestKey);
+      }
+      apiCache.set(cacheKey, {
+        data,
+        timestamp: Date.now(),
+        ttlMs: effectiveTtl,
+      });
+    }
+
+    return data;
+  })();
+
+  inFlightRequests.set(cacheKey, fetchPromise);
+
+  try {
+    return await fetchPromise;
+  } finally {
+    inFlightRequests.delete(cacheKey);
   }
 }
 
@@ -55,6 +248,10 @@ function isGithubRepository(value: unknown): value is GithubRepository {
     isStringOrNull(repository.pushed_at) && typeof repository.default_branch === 'string';
 }
 
+function isGithubRepositoriesArray(value: unknown): value is GithubRepository[] {
+  return Array.isArray(value) && value.every(isGithubRepository);
+}
+
 function isGithubBranch(value: unknown): value is GithubBranch {
   if (!value || typeof value !== 'object') return false;
   const branch = value as Record<string, unknown>;
@@ -64,73 +261,8 @@ function isGithubBranch(value: unknown): value is GithubBranch {
   return typeof commit.sha === 'string' && typeof commit.url === 'string';
 }
 
-export async function fetchGithubUser(username: string): Promise<GithubUser> {
-  let response: Response;
-  try {
-    response = await fetch(`${GITHUB_API_URL}/${encodeURIComponent(username)}`, {
-      headers: { Accept: 'application/vnd.github+json' },
-    });
-  } catch {
-    throw new GithubApiError('network');
-  }
-
-  if (response.status === 404) throw new GithubApiError('not-found');
-  if (!response.ok) throw new GithubApiError('network');
-
-  try {
-    const data: unknown = await response.json();
-    if (!isGithubUser(data)) throw new GithubApiError('unexpected');
-    return data;
-  } catch (error) {
-    if (error instanceof GithubApiError) throw error;
-    throw new GithubApiError('unexpected');
-  }
-}
-
-export async function fetchGithubRepositories(username: string): Promise<GithubRepository[]> {
-  let response: Response;
-  try {
-    response = await fetch(`${GITHUB_API_URL}/${encodeURIComponent(username)}/repos?per_page=100&sort=updated`, {
-      headers: { Accept: 'application/vnd.github+json' },
-    });
-  } catch {
-    throw new GithubApiError('network');
-  }
-
-  if (response.status === 404) throw new GithubApiError('not-found');
-  if (!response.ok) throw new GithubApiError('unexpected');
-
-  try {
-    const data: unknown = await response.json();
-    if (!Array.isArray(data) || !data.every(isGithubRepository)) throw new GithubApiError('unexpected');
-    return data;
-  } catch (error) {
-    if (error instanceof GithubApiError) throw error;
-    throw new GithubApiError('unexpected');
-  }
-}
-
-export async function fetchGithubBranches(owner: string, repo: string): Promise<GithubBranch[]> {
-  let response: Response;
-  try {
-    response = await fetch(`${GITHUB_REPOS_API_URL}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=100`, {
-      headers: { Accept: 'application/vnd.github+json' },
-    });
-  } catch {
-    throw new GithubApiError('network');
-  }
-
-  if (response.status === 404) throw new GithubApiError('not-found');
-  if (!response.ok) throw new GithubApiError('unexpected');
-
-  try {
-    const data: unknown = await response.json();
-    if (!Array.isArray(data) || !data.every(isGithubBranch)) throw new GithubApiError('unexpected');
-    return data;
-  } catch (error) {
-    if (error instanceof GithubApiError) throw error;
-    throw new GithubApiError('unexpected');
-  }
+function isGithubBranchesArray(value: unknown): value is GithubBranch[] {
+  return Array.isArray(value) && value.every(isGithubBranch);
 }
 
 function isGithubCommit(value: unknown): value is GithubCommit {
@@ -144,103 +276,93 @@ function isGithubCommit(value: unknown): value is GithubCommit {
   return true;
 }
 
+function isGithubCommitsArray(value: unknown): value is GithubCommit[] {
+  return Array.isArray(value) && value.every(isGithubCommit);
+}
+
+function isGithubCommitDetail(value: unknown): value is GithubCommitDetail {
+  return isGithubCommit(value);
+}
+
+function isGithubComparisonResult(value: unknown): value is GithubComparisonResult {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Record<string, unknown>;
+  if (typeof item.status !== 'string' || typeof item.total_commits !== 'number') return false;
+  if (!Array.isArray(item.commits) || !Array.isArray(item.files)) return false;
+  return true;
+}
+
+export async function fetchGithubUser(
+  username: string,
+  options?: RequestOptions
+): Promise<GithubUser> {
+  const normalized = username.trim().toLowerCase();
+  const cacheKey = `user:${normalized}`;
+  const url = `${GITHUB_API_URL}/${encodeURIComponent(username.trim())}`;
+  return executeGithubRequest(cacheKey, url, isGithubUser, CACHE_TTL.USER_PROFILE, options);
+}
+
+export async function fetchGithubRepositories(
+  username: string,
+  options?: RequestOptions
+): Promise<GithubRepository[]> {
+  const normalized = username.trim().toLowerCase();
+  const cacheKey = `repos:${normalized}`;
+  const url = `${GITHUB_API_URL}/${encodeURIComponent(username.trim())}/repos?per_page=100&sort=updated`;
+  return executeGithubRequest(cacheKey, url, isGithubRepositoriesArray, CACHE_TTL.REPOSITORIES, options);
+}
+
+export async function fetchGithubBranches(
+  owner: string,
+  repo: string,
+  options?: RequestOptions
+): Promise<GithubBranch[]> {
+  const cacheKey = `branches:${owner.trim().toLowerCase()}/${repo.trim().toLowerCase()}`;
+  const url = `${GITHUB_REPOS_API_URL}/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/branches?per_page=100`;
+  return executeGithubRequest(cacheKey, url, isGithubBranchesArray, CACHE_TTL.BRANCHES, options);
+}
+
 export async function fetchGithubCommits(
   owner: string,
   repo: string,
   branch?: string,
   page: number = 1,
-  perPage: number = 15
+  perPage: number = 15,
+  options?: RequestOptions
 ): Promise<GithubCommit[]> {
-  let response: Response;
+  const branchKey = branch ? branch.trim() : 'default';
+  const cacheKey = `commits:${owner.trim().toLowerCase()}/${repo.trim().toLowerCase()}:${branchKey}:p${page}:s${perPage}`;
   const query = new URLSearchParams({
     page: String(page),
     per_page: String(perPage),
   });
   if (branch) query.set('sha', branch);
 
-  try {
-    response = await fetch(
-      `${GITHUB_REPOS_API_URL}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?${query.toString()}`,
-      {
-        headers: { Accept: 'application/vnd.github+json' },
-      }
-    );
-  } catch {
-    throw new GithubApiError('network');
-  }
-
-  if (response.status === 404) throw new GithubApiError('not-found');
-  if (!response.ok) throw new GithubApiError('unexpected');
-
-  try {
-    const data: unknown = await response.json();
-    if (!Array.isArray(data) || !data.every(isGithubCommit)) throw new GithubApiError('unexpected');
-    return data;
-  } catch (error) {
-    if (error instanceof GithubApiError) throw error;
-    throw new GithubApiError('unexpected');
-  }
+  const url = `${GITHUB_REPOS_API_URL}/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/commits?${query.toString()}`;
+  return executeGithubRequest(cacheKey, url, isGithubCommitsArray, CACHE_TTL.COMMITS_LIST, options);
 }
 
 export async function fetchGithubCommitDetail(
   owner: string,
   repo: string,
-  sha: string
+  sha: string,
+  options?: RequestOptions
 ): Promise<GithubCommitDetail> {
-  let response: Response;
-  try {
-    response = await fetch(
-      `${GITHUB_REPOS_API_URL}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits/${encodeURIComponent(sha)}`,
-      {
-        headers: { Accept: 'application/vnd.github+json' },
-      }
-    );
-  } catch {
-    throw new GithubApiError('network');
-  }
-
-  if (response.status === 404) throw new GithubApiError('not-found');
-  if (!response.ok) throw new GithubApiError('unexpected');
-
-  try {
-    const data: unknown = await response.json();
-    if (!isGithubCommit(data)) throw new GithubApiError('unexpected');
-    return data as GithubCommitDetail;
-  } catch (error) {
-    if (error instanceof GithubApiError) throw error;
-    throw new GithubApiError('unexpected');
-  }
+  const cacheKey = `commit-detail:${owner.trim().toLowerCase()}/${repo.trim().toLowerCase()}:${sha.trim().toLowerCase()}`;
+  const url = `${GITHUB_REPOS_API_URL}/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/commits/${encodeURIComponent(sha.trim())}`;
+  return executeGithubRequest(cacheKey, url, isGithubCommitDetail, CACHE_TTL.COMMIT_DETAIL, options);
 }
 
 export async function fetchGithubCompare(
   owner: string,
   repo: string,
   base: string,
-  head: string
+  head: string,
+  options?: RequestOptions
 ): Promise<GithubComparisonResult> {
-  let response: Response;
-  try {
-    response = await fetch(
-      `${GITHUB_REPOS_API_URL}/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
-      {
-        headers: { Accept: 'application/vnd.github+json' },
-      }
-    );
-  } catch {
-    throw new GithubApiError('network');
-  }
-
-  if (response.status === 404) throw new GithubApiError('not-found');
-  if (!response.ok) throw new GithubApiError('unexpected');
-
-  try {
-    const data: unknown = await response.json();
-    if (!data || typeof data !== 'object') throw new GithubApiError('unexpected');
-    return data as GithubComparisonResult;
-  } catch (error) {
-    if (error instanceof GithubApiError) throw error;
-    throw new GithubApiError('unexpected');
-  }
+  const cacheKey = `compare:${owner.trim().toLowerCase()}/${repo.trim().toLowerCase()}:${base.trim()}...${head.trim()}`;
+  const url = `${GITHUB_REPOS_API_URL}/${encodeURIComponent(owner.trim())}/${encodeURIComponent(repo.trim())}/compare/${encodeURIComponent(base.trim())}...${encodeURIComponent(head.trim())}`;
+  return executeGithubRequest(cacheKey, url, isGithubComparisonResult, CACHE_TTL.COMPARE, options);
 }
 
 /**
@@ -342,58 +464,78 @@ function isGithubEvent(value: unknown): value is GithubEvent {
     typeof ev.repo === 'object' && ev.repo !== null;
 }
 
+function isGithubEventsArray(value: unknown): value is GithubEvent[] {
+  return Array.isArray(value) && value.every(isGithubEvent);
+}
+
 export async function fetchGithubUserEvents(
   username: string,
   page: number = 1,
-  perPage: number = 100
+  perPage: number = 100,
+  options?: RequestOptions
 ): Promise<GithubEvent[]> {
-  let response: Response;
+  const normalized = username.trim().toLowerCase();
+  const cacheKey = `events:${normalized}:p${page}:s${perPage}`;
   const query = new URLSearchParams({
     page: String(page),
     per_page: String(perPage),
   });
-
-  try {
-    response = await fetch(
-      `${GITHUB_API_URL}/${encodeURIComponent(username)}/events?${query.toString()}`,
-      {
-        headers: { Accept: 'application/vnd.github+json' },
-      }
-    );
-  } catch {
-    throw new GithubApiError('network');
-  }
-
-  if (response.status === 404) throw new GithubApiError('not-found');
-  if (!response.ok) throw new GithubApiError('unexpected');
-
-  try {
-    const data: unknown = await response.json();
-    if (!Array.isArray(data) || !data.every(isGithubEvent)) throw new GithubApiError('unexpected');
-    return data;
-  } catch (error) {
-    if (error instanceof GithubApiError) throw error;
-    throw new GithubApiError('unexpected');
-  }
+  const url = `${GITHUB_API_URL}/${encodeURIComponent(username.trim())}/events?${query.toString()}`;
+  return executeGithubRequest(cacheKey, url, isGithubEventsArray, CACHE_TTL.USER_EVENTS, options);
 }
 
-export async function fetchGithubContributions(username: string): Promise<GithubContributionDay[]> {
-  try {
-    const response = await fetch(
-      `https://github-contributions-api.jogruber.de/v4/${encodeURIComponent(username)}?y=last`,
-      {
-        headers: { Accept: 'application/json' },
-      }
-    );
-    if (!response.ok) return [];
-    const data = await response.json();
-    if (data && Array.isArray(data.contributions)) {
-      return data.contributions;
+export async function fetchGithubContributions(
+  username: string,
+  options?: RequestOptions
+): Promise<GithubContributionDay[]> {
+  const normalized = username.trim().toLowerCase();
+  const cacheKey = `contributions:${normalized}`;
+  const now = Date.now();
+
+  if (!options?.bypassCache) {
+    const cached = apiCache.get(cacheKey);
+    if (cached && now - cached.timestamp < cached.ttlMs) {
+      return cached.data as GithubContributionDay[];
     }
-  } catch {
-    // Graceful fallback to events
   }
-  return [];
+
+  const existingPromise = inFlightRequests.get(cacheKey);
+  if (existingPromise) {
+    return existingPromise as Promise<GithubContributionDay[]>;
+  }
+
+  const fetchPromise = (async () => {
+    try {
+      const response = await fetch(
+        `https://github-contributions-api.jogruber.de/v4/${encodeURIComponent(username.trim())}?y=last`,
+        {
+          headers: { Accept: 'application/json' },
+        }
+      );
+      if (!response.ok) return [];
+      const data = await response.json();
+      if (data && Array.isArray(data.contributions)) {
+        const contributions = data.contributions as GithubContributionDay[];
+        const effectiveTtl = options?.ttlMs ?? CACHE_TTL.CONTRIBUTIONS;
+        apiCache.set(cacheKey, {
+          data: contributions,
+          timestamp: Date.now(),
+          ttlMs: effectiveTtl,
+        });
+        return contributions;
+      }
+    } catch {
+      // Graceful fallback
+    }
+    return [];
+  })();
+
+  inFlightRequests.set(cacheKey, fetchPromise);
+  try {
+    return await fetchPromise;
+  } finally {
+    inFlightRequests.delete(cacheKey);
+  }
 }
 
 /**

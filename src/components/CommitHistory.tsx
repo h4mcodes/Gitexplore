@@ -13,7 +13,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import { buildCommitRelationshipModel, fetchGithubCommits } from '../services/githubApi';
+import { buildCommitRelationshipModel, fetchGithubCommits, GithubApiError } from '../services/githubApi';
 import type { GithubBranch, GithubCommit } from '../types/github';
 import { CommitInspection } from './CommitInspection';
 
@@ -66,7 +66,8 @@ export function CommitHistory({
   onClose,
 }: CommitHistoryProps) {
   const [commits, setCommits] = useState<GithubCommit[]>([]);
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'ready' | 'rate-limit' | 'error'>('loading');
+  const [rateLimitTime, setRateLimitTime] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -74,21 +75,30 @@ export function CommitHistory({
   const [selectedSha, setSelectedSha] = useState<string | null>(null);
   const [inspectingSha, setInspectingSha] = useState<string | null>(null);
 
-  const loadInitialCommits = () => {
+  const loadInitialCommits = (bypassCache = false) => {
     setStatus('loading');
     setPage(1);
     setHasMore(true);
     setSelectedSha(null);
     setInspectingSha(null);
-    fetchGithubCommits(owner, repo, selectedBranch, 1, COMMITS_PER_PAGE)
+    fetchGithubCommits(owner, repo, selectedBranch, 1, COMMITS_PER_PAGE, { bypassCache })
       .then((data) => {
         setCommits(data);
         setHasMore(data.length >= COMMITS_PER_PAGE);
         setStatus('ready');
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         setCommits([]);
-        setStatus('error');
+        if (err instanceof GithubApiError && err.kind === 'rate-limit') {
+          setStatus('rate-limit');
+          setRateLimitTime(
+            err.rateLimitResetDate
+              ? err.rateLimitResetDate.toLocaleTimeString()
+              : null
+          );
+        } else {
+          setStatus('error');
+        }
       });
   };
 
@@ -262,10 +272,19 @@ export function CommitHistory({
         </div>
       )}
 
+      {status === 'rate-limit' && (
+        <div className="commit-error-box">
+          <p>GitHub API rate limit reached (60 req/hr). {rateLimitTime ? `Resets at ${rateLimitTime}.` : 'Please wait a moment.'}</p>
+          <button type="button" onClick={() => loadInitialCommits(true)} className="commit-retry-btn">
+            <RotateCw size={12} /> Retry
+          </button>
+        </div>
+      )}
+
       {status === 'error' && (
         <div className="commit-error-box">
           <p>Failed to load commit history for this branch.</p>
-          <button type="button" onClick={loadInitialCommits} className="commit-retry-btn">
+          <button type="button" onClick={() => loadInitialCommits(true)} className="commit-retry-btn">
             <RotateCw size={12} /> Retry
           </button>
         </div>
