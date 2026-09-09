@@ -157,6 +157,14 @@ h1 { color: #18304c; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25); } h1 span {
 .commit-header-icon { color: #245691; flex: none; }
 .commit-header-title { font-size: 12px; font-weight: 700; color: #183350; white-space: nowrap; }
 .commit-branch-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border: 1px solid rgba(34,139,88,.28); border-radius: 99px; background: #e0f2e9; color: #155538; font: 9px 'DM Mono', monospace; font-weight: 650; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.commit-title-group .glass-dropdown-container { position: relative; }
+.commit-title-group .glass-dropdown-trigger { height: 24px; min-width: 105px; padding: 0 7px; border: 1px solid rgba(35,70,108,.22); border-radius: 6px; background: rgba(255,255,255,.75); color: #183350; font: 9.5px 'DM Mono', monospace; font-weight: 600; box-shadow: none; }
+.commit-title-group .glass-dropdown-trigger:hover,
+.commit-title-group .glass-dropdown-trigger.is-open { border-color: rgba(70,121,180,.62); background: rgba(255,255,255,.92); box-shadow: 0 0 0 2px rgba(85,132,190,.13); }
+.commit-title-group .glass-dropdown-label { font-size: 9.5px; max-width: 110px; }
+.commit-title-group .glass-dropdown-chevron { width: 12px; height: 12px; color: #436488; }
+.commit-title-group .glass-dropdown-menu { top: calc(100% + 4px); padding: 4px; border-radius: 8px; min-width: 140px; background: rgba(235,244,253,.95); backdrop-filter: blur(16px); z-index: 60; box-shadow: 0 12px 28px rgba(35,65,95,.2), inset 0 1px 0 rgba(255,255,255,.85); }
+.commit-title-group .glass-dropdown-item { padding: 5px 8px; font-size: 9px; border-radius: 5px; }
 .commit-branch-select { height: 24px; padding: 0 6px; border: 1px solid rgba(35,70,108,.22); border-radius: 6px; background: rgba(255,255,255,.7); color: #183350; font: 10px 'DM Mono', monospace; font-weight: 600; outline: 0; cursor: pointer; max-width: 130px; text-overflow: ellipsis; }
 .commit-header-right { display: flex; align-items: center; gap: 6px; flex: none; }
 .commit-model-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border: 1px solid rgba(36,86,145,.2); border-radius: 99px; background: rgba(255,255,255,.5); color: #20456e; font: 9px 'DM Mono', monospace; font-weight: 600; white-space: nowrap; }
@@ -254,6 +262,14 @@ h1 { color: #18304c; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25); } h1 span {
 .compare-ref-block { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; }
 .compare-ref-label { font: 9px 'DM Mono', monospace; font-weight: 700; text-transform: uppercase; color: #436488; letter-spacing: .02em; flex: none; }
 .compare-select-wrap { display: flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border: 1px solid rgba(35,70,108,.2); border-radius: 6px; background: rgba(255,255,255,.85); flex: 1; min-width: 110px; }
+.compare-select-wrap .glass-dropdown-container { position: relative; flex: 1; min-width: 0; width: 100%; }
+.compare-select-wrap .glass-dropdown-trigger { height: 24px; width: 100%; border: 0; background: transparent; padding: 0; color: #163658; font: 9.5px 'DM Mono', monospace; font-weight: 650; box-shadow: none; }
+.compare-select-wrap .glass-dropdown-trigger:hover,
+.compare-select-wrap .glass-dropdown-trigger.is-open { background: transparent; border: 0; box-shadow: none; }
+.compare-select-wrap .glass-dropdown-label { font-size: 9.5px; max-width: 120px; }
+.compare-select-wrap .glass-dropdown-chevron { width: 12px; height: 12px; color: #436488; }
+.compare-select-wrap .glass-dropdown-menu { top: calc(100% + 6px); padding: 4px; border-radius: 8px; min-width: 145px; background: rgba(235,244,253,.95); backdrop-filter: blur(16px); z-index: 60; box-shadow: 0 12px 28px rgba(35,65,95,.2), inset 0 1px 0 rgba(255,255,255,.85); }
+.compare-select-wrap .glass-dropdown-item { padding: 5px 8px; font-size: 9px; border-radius: 5px; }
 .compare-select-icon { color: #245691; flex: none; }
 .compare-glass-select { width: 100%; border: 0; outline: 0; background: transparent; color: #163658; font: 9.5px 'DM Mono', monospace; font-weight: 650; cursor: pointer; text-overflow: ellipsis; }
 .compare-swap-btn { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid rgba(36,86,145,.3); border-radius: 7px; background: rgba(255,255,255,.85); color: #1c4a7c; cursor: pointer; transition: background .15s, color .15s, transform .15s; flex: none; }
@@ -471,6 +487,14 @@ h1 { color: #18304c; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25); } h1 span {
 .diff-search-input { border: 0; outline: 0; background: transparent; font: 9.5px 'DM Mono', monospace; font-weight: 550; color: #163658; width: 100%; }
 .diff-search-input::placeholder { color: #6e8fae; }
 .diff-status-filter { display: flex; align-items: center; gap: 4px; color: #436488; }
+.diff-status-filter .glass-dropdown-container { position: relative; }
+.diff-status-filter .glass-dropdown-trigger { height: 26px; min-width: 125px; padding: 0 8px; border: 1px solid rgba(35,70,108,.18); border-radius: 6px; background: rgba(255,255,255,.75); color: #1c426a; font: 9.5px 'DM Mono', monospace; font-weight: 600; box-shadow: none; }
+.diff-status-filter .glass-dropdown-trigger:hover,
+.diff-status-filter .glass-dropdown-trigger.is-open { border-color: rgba(70,121,180,.62); background: rgba(255,255,255,.9); box-shadow: 0 0 0 2px rgba(85,132,190,.13); }
+.diff-status-filter .glass-dropdown-label { font-size: 9.5px; max-width: 125px; text-transform: capitalize; }
+.diff-status-filter .glass-dropdown-chevron { width: 12px; height: 12px; color: #436488; }
+.diff-status-filter .glass-dropdown-menu { top: calc(100% + 4px); padding: 4px; border-radius: 8px; min-width: 140px; background: rgba(235,244,253,.95); backdrop-filter: blur(16px); z-index: 60; box-shadow: 0 12px 28px rgba(35,65,95,.2), inset 0 1px 0 rgba(255,255,255,.85); }
+.diff-status-filter .glass-dropdown-item { padding: 5px 8px; font-size: 9px; border-radius: 5px; text-transform: capitalize; }
 .diff-status-filter select { height: 26px; padding: 0 6px; border: 1px solid rgba(35,70,108,.18); border-radius: 6px; background: rgba(255,255,255,.75); color: #1c426a; font: 9px 'DM Mono', monospace; font-weight: 600; outline: 0; cursor: pointer; }
 
 .diff-toolbar-right { display: flex; align-items: center; gap: 6px; }

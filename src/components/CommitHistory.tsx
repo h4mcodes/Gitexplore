@@ -16,6 +16,7 @@ import {
 import { buildCommitRelationshipModel, fetchGithubCommits, GithubApiError } from '../services/githubApi';
 import type { GithubBranch, GithubCommit } from '../types/github';
 import { CommitInspection } from './CommitInspection';
+import { GlassDropdown, type DropdownOption } from './GlassDropdown';
 
 interface CommitHistoryProps {
   owner: string;
@@ -171,8 +172,14 @@ export function CommitHistory({
     );
   }
 
+  const branchOptions: DropdownOption[] = useMemo(() => {
+    if (!branches) return [];
+    return branches.map((b) => ({ value: b.name, label: b.name }));
+  }, [branches]);
+
   return (
-    <div className="commit-history-panel" aria-label={`Commit history for ${fullName} on branch ${selectedBranch}`}>
+    <div className="commit-history-panel" aria-label="Commit History and Lineage Explorer">
+      {/* Header */}
       <div className="commit-history-header">
         <div className="commit-header-left">
           {onBack && (
@@ -190,18 +197,12 @@ export function CommitHistory({
             <GitCommit size={14} className="commit-header-icon" />
             <span className="commit-header-title">Commits</span>
             {branches && onSelectBranch ? (
-              <select
-                className="commit-branch-select"
+              <GlassDropdown
                 value={selectedBranch}
-                onChange={(e) => onSelectBranch(e.target.value)}
-                aria-label="Switch branch"
-              >
-                {branches.map((b) => (
-                  <option key={b.name} value={b.name}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
+                options={branchOptions}
+                onChange={onSelectBranch}
+                ariaLabel="Switch branch"
+              />
             ) : (
               <span className="commit-branch-tag">
                 <GitBranch size={10} />

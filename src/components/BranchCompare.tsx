@@ -20,6 +20,7 @@ import {
 import { fetchGithubCompare, GithubApiError } from '../services/githubApi';
 import type { GithubBranch, GithubComparisonResult } from '../types/github';
 import { DiffViewer } from './DiffViewer';
+import { GlassDropdown, type DropdownOption } from './GlassDropdown';
 
 interface BranchCompareProps {
   owner: string;
@@ -148,68 +149,69 @@ export function BranchCompare({
     };
   }, [files]);
 
+  const branchOptions: DropdownOption[] = useMemo(() => {
+    return branches.map((b) => ({ value: b.name, label: b.name }));
+  }, [branches]);
+
   return (
-    <div className="branch-compare-panel" aria-label={`Compare ${base} and ${head}`}>
-      {/* Top Header */}
+    <div className="commit-inspection-panel" aria-label="Branch and Commit Comparison">
+      {/* Compare Header */}
       <div className="commit-inspect-header">
         <div className="commit-inspect-nav-left">
           <button
             type="button"
             onClick={onBack}
             className="commit-inspect-back-btn"
-            title="Back to branches"
-            aria-label="Back to branches"
+            title="Back to branch explorer"
+            aria-label="Back to branch explorer"
           >
             <ArrowLeft size={13} />
-            <span>Branches</span>
           </button>
-
-          <span className="commit-inspect-divider">/</span>
-
           <div className="commit-inspect-context">
-            <span className="commit-inspect-repo-label" title={fullName}>
+            <span className="commit-inspect-repo-label">
               <FolderGit2 size={12} />
-              <span>{repo}</span>
+              {fullName}
             </span>
+            <span className="commit-inspect-divider">/</span>
             <span className="compare-header-title-badge">
-              <ArrowLeftRight size={11} />
-              <span>Comparison</span>
+              <GitBranch size={10} />
+              Compare
             </span>
           </div>
         </div>
 
         <div className="commit-inspect-nav-right">
-          {files.length > 0 && (
+          {status === 'ready' && comparison && (
             <button
               type="button"
               onClick={() => setShowCodeModal(true)}
               className="show-code-nav-btn"
-              title="Open full code diff window"
+              title="Inspect full code diff"
+              aria-label="Inspect full code diff"
             >
               <FileCode size={12} />
-              <span>Show Code ({files.length})</span>
+              <span>Show Code</span>
             </button>
           )}
-
           {comparison?.html_url && (
             <a
               href={comparison.html_url}
               target="_blank"
               rel="noreferrer"
               className="commit-inspect-github-link"
-              title="Open comparison on GitHub"
+              aria-label="View comparison on GitHub"
             >
+              <ExternalLink size={12} />
               <span>GitHub</span>
-              <ExternalLink size={11} />
             </a>
           )}
-
           {onClose && (
             <button
               type="button"
               onClick={onClose}
               className="commit-close-btn"
-              aria-label="Close comparison view"
+              title="Close comparison"
+              aria-label="Close comparison"
             >
               <X size={14} />
             </button>
@@ -223,18 +225,12 @@ export function BranchCompare({
           <span className="compare-ref-label">Base:</span>
           <div className="compare-select-wrap">
             <GitBranch size={11} className="compare-select-icon" />
-            <select
+            <GlassDropdown
               value={base}
-              onChange={(e) => setBase(e.target.value)}
-              className="compare-glass-select"
-              aria-label="Select base branch"
-            >
-              {branches.map((b) => (
-                <option key={`base-${b.name}`} value={b.name}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+              options={branchOptions}
+              onChange={setBase}
+              ariaLabel="Select base branch"
+            />
           </div>
         </div>
 
@@ -252,18 +248,12 @@ export function BranchCompare({
           <span className="compare-ref-label">Head:</span>
           <div className="compare-select-wrap">
             <GitBranch size={11} className="compare-select-icon" />
-            <select
+            <GlassDropdown
               value={head}
-              onChange={(e) => setHead(e.target.value)}
-              className="compare-glass-select"
-              aria-label="Select head branch"
-            >
-              {branches.map((b) => (
-                <option key={`head-${b.name}`} value={b.name}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+              options={branchOptions}
+              onChange={setHead}
+              ariaLabel="Select head branch"
+            />
           </div>
         </div>
       </div>

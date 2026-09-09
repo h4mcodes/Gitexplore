@@ -15,6 +15,7 @@ import {
   Search,
   SlidersHorizontal,
 } from 'lucide-react';
+import { GlassDropdown, type DropdownOption } from './GlassDropdown';
 import type { GithubCommitFile } from '../types/github';
 
 export interface DiffLine {
@@ -245,6 +246,11 @@ export function DiffViewer({ files }: DiffViewerProps) {
   const totalAdditions = useMemo(() => files.reduce((acc, f) => acc + (f.additions || 0), 0), [files]);
   const totalDeletions = useMemo(() => files.reduce((acc, f) => acc + (f.deletions || 0), 0), [files]);
 
+  const statusOptions: DropdownOption[] = useMemo(() => [
+    { value: 'all', label: `All statuses (${files.length})` },
+    ...statuses.map((st) => ({ value: st, label: st }))
+  ], [statuses, files.length]);
+
   return (
     <div className="diff-viewer-wrapper" aria-label="Commit Code Diff Investigation">
       {/* Diff Toolbar Controls */}
@@ -265,18 +271,12 @@ export function DiffViewer({ files }: DiffViewerProps) {
           {statuses.length > 1 && (
             <div className="diff-status-filter">
               <Filter size={11} />
-              <select
+              <GlassDropdown
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                aria-label="Filter files by status"
-              >
-                <option value="all">All statuses ({files.length})</option>
-                {statuses.map((st) => (
-                  <option key={st} value={st}>
-                    {st}
-                  </option>
-                ))}
-              </select>
+                options={statusOptions}
+                onChange={(val) => setStatusFilter(val)}
+                ariaLabel="Filter files by status"
+              />
             </div>
           )}
         </div>
