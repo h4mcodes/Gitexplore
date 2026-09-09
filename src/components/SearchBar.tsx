@@ -4,6 +4,8 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { sanitizeUsername } from '../services/security';
+
 export function SearchBar() {
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
@@ -11,13 +13,13 @@ export function SearchBar() {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const trimmedUsername = username.trim();
-    if (!trimmedUsername) {
-      setError('Please enter a GitHub username.');
+    const cleanUsername = sanitizeUsername(username.trim());
+    if (!cleanUsername) {
+      setError('Please enter a valid GitHub username.');
       return;
     }
     setError('');
-    navigate(`/profile/${encodeURIComponent(trimmedUsername)}`);
+    navigate(`/profile/${encodeURIComponent(cleanUsername)}`);
   }
 
   return (

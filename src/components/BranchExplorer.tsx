@@ -5,6 +5,7 @@ import type { GithubBranch } from '../types/github';
 import { CommitHistory } from './CommitHistory';
 import { BranchCompare } from './BranchCompare';
 import { CommitInspection } from './CommitInspection';
+import { ErrorBoundary } from './ErrorBoundary';
 
 interface BranchExplorerProps {
   owner: string;
@@ -64,46 +65,64 @@ export function BranchExplorer({ owner, repo, defaultBranch, fullName, onClose }
   if (compareState) {
     if (inspectingSha) {
       return (
-        <CommitInspection
-          owner={owner}
-          repo={repo}
-          sha={inspectingSha}
-          branch={compareState.head}
-          fullName={fullName}
-          onBack={() => setInspectingSha(null)}
-          onSelectSha={(sha) => setInspectingSha(sha)}
-          onClose={onClose}
-        />
+        <ErrorBoundary
+          fallbackTitle="Commit Inspection Error"
+          fallbackMessage="Could not render commit details for this commit."
+          onReset={() => setInspectingSha(null)}
+        >
+          <CommitInspection
+            owner={owner}
+            repo={repo}
+            sha={inspectingSha}
+            branch={compareState.head}
+            fullName={fullName}
+            onBack={() => setInspectingSha(null)}
+            onSelectSha={(sha) => setInspectingSha(sha)}
+            onClose={onClose}
+          />
+        </ErrorBoundary>
       );
     }
 
     return (
-      <BranchCompare
-        owner={owner}
-        repo={repo}
-        fullName={fullName}
-        branches={branches}
-        initialBase={compareState.base}
-        initialHead={compareState.head}
-        onBack={() => setCompareState(null)}
-        onClose={onClose}
-        onInspectCommit={(sha) => setInspectingSha(sha)}
-      />
+      <ErrorBoundary
+        fallbackTitle="Branch Comparison Error"
+        fallbackMessage="An unexpected error occurred during branch comparison."
+        onReset={() => setCompareState(null)}
+      >
+        <BranchCompare
+          owner={owner}
+          repo={repo}
+          fullName={fullName}
+          branches={branches}
+          initialBase={compareState.base}
+          initialHead={compareState.head}
+          onBack={() => setCompareState(null)}
+          onClose={onClose}
+          onInspectCommit={(sha) => setInspectingSha(sha)}
+        />
+      </ErrorBoundary>
     );
   }
 
   if (activeBranchForCommits) {
     return (
-      <CommitHistory
-        owner={owner}
-        repo={repo}
-        selectedBranch={activeBranchForCommits}
-        fullName={fullName}
-        branches={branches}
-        onSelectBranch={(b) => setActiveBranchForCommits(b)}
-        onBack={() => setActiveBranchForCommits(null)}
-        onClose={onClose}
-      />
+      <ErrorBoundary
+        fallbackTitle="Commit History Error"
+        fallbackMessage="An unexpected error occurred while loading commit logs."
+        onReset={() => setActiveBranchForCommits(null)}
+      >
+        <CommitHistory
+          owner={owner}
+          repo={repo}
+          selectedBranch={activeBranchForCommits}
+          fullName={fullName}
+          branches={branches}
+          onSelectBranch={(b) => setActiveBranchForCommits(b)}
+          onBack={() => setActiveBranchForCommits(null)}
+          onClose={onClose}
+        />
+      </ErrorBoundary>
     );
   }
 

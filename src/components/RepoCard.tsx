@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { CircleDot, Clock3, ExternalLink, GitBranch, GitFork, Globe2, Star } from 'lucide-react';
 import type { GithubRepository } from '../types/github';
 import { BranchExplorer } from './BranchExplorer';
+import { ErrorBoundary } from './ErrorBoundary';
+import { sanitizeUrl } from '../services/security';
 
 type PreviewRepoCardProps = { name: string; description: string; language: string; color: string; stars: string };
 type GithubRepoCardProps = { repository: GithubRepository; index: number };
@@ -67,14 +69,16 @@ export const RepoCard = memo(function RepoCard(props: RepoCardProps) {
             </button>
 
             <div className="repository-links">
-              {repository.homepage && (
-                <a href={normaliseHomepage(repository.homepage)} target="_blank" rel="noreferrer" aria-label={`Open ${repository.name} homepage`}>
+              {repository.homepage && sanitizeUrl(repository.homepage) && (
+                <a href={sanitizeUrl(repository.homepage)} target="_blank" rel="noreferrer" aria-label={`Open ${repository.name} homepage`}>
                   <Globe2 size={14} />
                 </a>
               )}
-              <a href={repository.html_url} target="_blank" rel="noreferrer" aria-label={`Open ${repository.name} on GitHub`}>
-                <ExternalLink size={14} />
-              </a>
+              {sanitizeUrl(repository.html_url) && (
+                <a href={sanitizeUrl(repository.html_url)} target="_blank" rel="noreferrer" aria-label={`Open ${repository.name} on GitHub`}>
+                  <ExternalLink size={14} />
+                </a>
+              )}
             </div>
           </div>
         </div>
@@ -87,13 +91,19 @@ export const RepoCard = memo(function RepoCard(props: RepoCardProps) {
               exit={{ opacity: 0, y: -6, scale: 0.98 }}
               transition={{ duration: 0.18, ease: 'easeOut' }}
             >
-              <BranchExplorer
-                owner={owner}
-                repo={repoName}
-                defaultBranch={repository.default_branch}
-                fullName={repository.full_name}
-                onClose={() => setShowBranches(false)}
-              />
+              <ErrorBoundary
+                fallbackTitle="Branch Explorer Error"
+                fallbackMessage={`Failed to render branch graph for ${repository.name}.`}
+                isCompact
+              >
+                <BranchExplorer
+                  owner={owner}
+                  repo={repoName}
+                  defaultBranch={repository.default_branch}
+                  fullName={repository.full_name}
+                  onClose={() => setShowBranches(false)}
+                />
+              </ErrorBoundary>
             </motion.div>
           )}
         </AnimatePresence>

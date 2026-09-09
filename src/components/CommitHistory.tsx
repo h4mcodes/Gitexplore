@@ -148,6 +148,11 @@ export function CommitHistory({
     });
   }, [commits, query]);
 
+  const branchOptions: DropdownOption[] = useMemo(() => {
+    if (!branches) return [];
+    return branches.map((b) => ({ value: b.name, label: b.name }));
+  }, [branches]);
+
   const scrollToSha = (targetSha: string) => {
     setSelectedSha(targetSha);
     const element = document.getElementById(`commit-node-${targetSha}`);
@@ -171,11 +176,6 @@ export function CommitHistory({
       />
     );
   }
-
-  const branchOptions: DropdownOption[] = useMemo(() => {
-    if (!branches) return [];
-    return branches.map((b) => ({ value: b.name, label: b.name }));
-  }, [branches]);
 
   return (
     <div className="commit-history-panel" aria-label="Commit History and Lineage Explorer">
