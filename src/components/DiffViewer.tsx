@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -40,15 +40,24 @@ export interface SplitDiffRow {
   hunkText?: string;
 }
 
+// In-memory bounded caches for parsed diff lines & split matrix rows
+const parsedPatchCache = new Map<string, DiffLine[]>();
+const splitRowsCache = new Map<string, SplitDiffRow[]>();
+const MAX_PARSED_CACHE = 150;
+
 export function parseUnifiedPatch(patch: string): DiffLine[] {
   if (!patch) return [];
+  const cached = parsedPatchCache.get(patch);
+  if (cached) return cached;
+
   const rawLines = patch.split('\n');
   const lines: DiffLine[] = [];
 
   let currentOld = 1;
   let currentNew = 1;
 
-  for (const raw of rawLines) {
+  for (let i = 0; i < rawLines.length; i++) {
+    const raw = rawLines[i];
     if (raw.startsWith('@@')) {
       const hunkMatch = raw.match(/@@\s*-(\d+)(?:,\d+)?\s*\+(\d+)(?:,\d+)?\s*@@(.*)/);
       if (hunkMatch) {
@@ -92,10 +101,18 @@ export function parseUnifiedPatch(patch: string): DiffLine[] {
     }
   }
 
+  if (parsedPatchCache.size > MAX_PARSED_CACHE) {
+    const oldestKey = parsedPatchCache.keys().next().value;
+    if (oldestKey) parsedPatchCache.delete(oldestKey);
+  }
+  parsedPatchCache.set(patch, lines);
+
   return lines;
 }
 
 export function buildSplitDiffRows(diffLines: DiffLine[]): SplitDiffRow[] {
+  if (!diffLines || diffLines.length === 0) return [];
+
   const rows: SplitDiffRow[] = [];
   let i = 0;
 
@@ -175,6 +192,287 @@ export function buildSplitDiffRows(diffLines: DiffLine[]): SplitDiffRow[] {
 
   return rows;
 }
+
+const INITIAL_VISIBLE_LINES = 200;
+
+interface DiffFileCardProps {
+  file: GithubCommitFile;
+  fileIdx: number;
+  isExpanded: boolean;
+  viewMode: 'unified' | 'split';
+  onToggle: (filename: string) => void;
+  onCopyPath: (filename: string) => void;
+  isCopied: boolean;
+}
+
+const DiffFileCard = memo(function DiffFileCard({
+  file,
+  fileIdx,
+  isExpanded,
+  viewMode,
+  onToggle,
+  onCopyPath,
+  isCopied,
+}: DiffFileCardProps) {
+  const [showAllLines, setShowAllLines] = useState(false);
+  const statusName = file.status || 'modified';
+
+  // Only parse patch when expanded to ensure 0 cost for collapsed files
+  const parsedLines = useMemo(() => {
+    if (!isExpanded || !file.patch) return [];
+    return parseUnifiedPatch(file.patch);
+  }, [isExpanded, file.patch]);
+
+  const splitRows = useMemo(() => {
+    if (!isExpanded || !file.patch || viewMode !== 'split') return [];
+    const patchKey = file.patch;
+    const cached = splitRowsCache.get(patchKey);
+    if (cached) return cached;
+
+    const computed = buildSplitDiffRows(parsedLines);
+    if (splitRowsCache.size > MAX_PARSED_CACHE) {
+      const oldestKey = splitRowsCache.keys().next().value;
+      if (oldestKey) splitRowsCache.delete(oldestKey);
+    }
+    splitRowsCache.set(patchKey, computed);
+    return computed;
+  }, [isExpanded, file.patch, viewMode, parsedLines]);
+
+  const isLargeUnified = parsedLines.length > INITIAL_VISIBLE_LINES;
+  const isLargeSplit = splitRows.length > INITIAL_VISIBLE_LINES;
+
+  const visibleUnifiedLines = showAllLines || !isLargeUnified
+    ? parsedLines
+    : parsedLines.slice(0, INITIAL_VISIBLE_LINES);
+
+  const visibleSplitRows = showAllLines || !isLargeSplit
+    ? splitRows
+    : splitRows.slice(0, INITIAL_VISIBLE_LINES);
+
+  return (
+    <div
+      id={`diff-file-${fileIdx}`}
+      className={`diff-file-card ${isExpanded ? 'is-open' : 'is-closed'}`}
+    >
+      {/* File Header Bar */}
+      <div
+        className="diff-file-header"
+        onClick={() => onToggle(file.filename)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggle(file.filename);
+          }
+        }}
+        aria-expanded={isExpanded}
+        aria-label={`Toggle patch for ${file.filename}`}
+      >
+        <div className="diff-file-header-left">
+          <span className="diff-chevron-icon">
+            {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          </span>
+          <span className={`file-status-badge status-${statusName}`}>
+            {statusName}
+          </span>
+          <span className="diff-filename-text" title={file.filename}>
+            {file.filename}
+          </span>
+          {file.previous_filename && (
+            <span className="diff-renamed-text" title={`Renamed from ${file.previous_filename}`}>
+              ← {file.previous_filename}
+            </span>
+          )}
+        </div>
+
+        <div
+          className="diff-file-header-right"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="diff-file-metrics">
+            {file.additions > 0 && (
+              <span className="file-additions-tag">+{file.additions}</span>
+            )}
+            {file.deletions > 0 && (
+              <span className="file-deletions-tag">-{file.deletions}</span>
+            )}
+            {file.changes > 0 && file.additions === 0 && file.deletions === 0 && (
+              <span className="file-changes-tag">{file.changes} changes</span>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onCopyPath(file.filename)}
+            className="diff-copy-path-btn"
+            title="Copy file path"
+            aria-label="Copy file path"
+          >
+            {isCopied ? (
+              <Check size={11} className="text-emerald" />
+            ) : (
+              <Copy size={11} />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* File Diff Content */}
+      {isExpanded && (
+        <div className="diff-content-body">
+          {!file.patch ? (
+            <div className="diff-no-patch-note">
+              <Layers size={13} />
+              <span>
+                {file.status === 'added' && file.changes === 0
+                  ? 'Empty file added.'
+                  : file.status === 'removed' && file.changes === 0
+                  ? 'Empty file removed.'
+                  : 'Binary file or large patch diff not directly rendered by GitHub REST API.'}
+              </span>
+            </div>
+          ) : viewMode === 'unified' ? (
+            /* UNIFIED INLINE DIFF VIEW */
+            <div className="diff-table-container">
+              <table className="diff-table unified-table">
+                <tbody>
+                  {visibleUnifiedLines.map((line, lineIdx) => {
+                    if (line.type === 'hunk-header') {
+                      return (
+                        <tr key={lineIdx} className="diff-row hunk-row">
+                          <td className="diff-gutter hunk-gutter" colSpan={2}>
+                            ...
+                          </td>
+                          <td className="diff-line-code hunk-code">
+                            <code>{line.text}</code>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    const isAdd = line.type === 'addition';
+                    const isDel = line.type === 'deletion';
+
+                    return (
+                      <tr
+                        key={lineIdx}
+                        className={`diff-row ${isAdd ? 'row-add' : isDel ? 'row-del' : 'row-context'}`}
+                      >
+                        <td className="diff-gutter old-gutter">
+                          {line.oldLineNumber != null ? line.oldLineNumber : ''}
+                        </td>
+                        <td className="diff-gutter new-gutter">
+                          {line.newLineNumber != null ? line.newLineNumber : ''}
+                        </td>
+                        <td className="diff-line-code">
+                          <span className="diff-marker">
+                            {isAdd ? '+' : isDel ? '-' : ' '}
+                          </span>
+                          <code className="diff-text">{line.text || ' '}</code>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {!showAllLines && isLargeUnified && (
+                <div className="diff-large-chunk-banner">
+                  <span>Showing first {INITIAL_VISIBLE_LINES} of {parsedLines.length} lines.</span>
+                  <button
+                    type="button"
+                    className="diff-show-more-btn"
+                    onClick={() => setShowAllLines(true)}
+                  >
+                    Show remaining {parsedLines.length - INITIAL_VISIBLE_LINES} lines
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* SPLIT SIDE-BY-SIDE DIFF VIEW */
+            <div className="diff-table-container split-scroll-container">
+              <table className="diff-table split-table">
+                <tbody>
+                  {visibleSplitRows.map((row, rIdx) => {
+                    if (row.isHunkHeader) {
+                      return (
+                        <tr key={rIdx} className="diff-row hunk-row">
+                          <td className="diff-gutter hunk-gutter">...</td>
+                          <td className="diff-line-code hunk-code">
+                            <code>{row.hunkText}</code>
+                          </td>
+                          <td className="diff-gutter hunk-gutter">...</td>
+                          <td className="diff-line-code hunk-code">
+                            <code>{row.hunkText}</code>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    const left = row.left;
+                    const right = row.right;
+
+                    const isLeftDel = left?.type === 'deletion';
+                    const isRightAdd = right?.type === 'addition';
+
+                    return (
+                      <tr key={rIdx} className="diff-row split-row">
+                        {/* Left Column (Old/Deletions) */}
+                        <td className={`diff-gutter old-gutter ${isLeftDel ? 'gutter-del' : ''}`}>
+                          {left?.lineNumber != null ? left.lineNumber : ''}
+                        </td>
+                        <td className={`diff-line-code split-left-code ${isLeftDel ? 'row-del' : left?.type === 'empty' ? 'row-empty' : 'row-context'}`}>
+                          {left && left.type !== 'empty' && (
+                            <>
+                              <span className="diff-marker">
+                                {isLeftDel ? '-' : ' '}
+                              </span>
+                              <code className="diff-text">{left.text || ' '}</code>
+                            </>
+                          )}
+                        </td>
+
+                        {/* Right Column (New/Additions) */}
+                        <td className={`diff-gutter new-gutter ${isRightAdd ? 'gutter-add' : ''}`}>
+                          {right?.lineNumber != null ? right.lineNumber : ''}
+                        </td>
+                        <td className={`diff-line-code split-right-code ${isRightAdd ? 'row-add' : right?.type === 'empty' ? 'row-empty' : 'row-context'}`}>
+                          {right && right.type !== 'empty' && (
+                            <>
+                              <span className="diff-marker">
+                                {isRightAdd ? '+' : ' '}
+                              </span>
+                              <code className="diff-text">{right.text || ' '}</code>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              {!showAllLines && isLargeSplit && (
+                <div className="diff-large-chunk-banner">
+                  <span>Showing first {INITIAL_VISIBLE_LINES} of {splitRows.length} rows.</span>
+                  <button
+                    type="button"
+                    className="diff-show-more-btn"
+                    onClick={() => setShowAllLines(true)}
+                  >
+                    Show remaining {splitRows.length - INITIAL_VISIBLE_LINES} rows
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
 
 interface DiffViewerProps {
   files: GithubCommitFile[];
@@ -350,211 +648,18 @@ export function DiffViewer({ files }: DiffViewerProps) {
         </div>
       ) : (
         <div className="diff-files-container">
-          {filteredFiles.map((file, fileIdx) => {
-            const isExpanded = expandedFiles[file.filename] ?? false;
-            const statusName = file.status || 'modified';
-            const parsedLines = file.patch ? parseUnifiedPatch(file.patch) : [];
-            const splitRows = file.patch && viewMode === 'split' ? buildSplitDiffRows(parsedLines) : [];
-
-            return (
-              <div
-                key={`${file.filename}-${fileIdx}`}
-                id={`diff-file-${fileIdx}`}
-                className={`diff-file-card ${isExpanded ? 'is-open' : 'is-closed'}`}
-              >
-                {/* File Header Bar */}
-                <div
-                  className="diff-file-header"
-                  onClick={() => toggleFile(file.filename)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      toggleFile(file.filename);
-                    }
-                  }}
-                  aria-expanded={isExpanded}
-                  aria-label={`Toggle patch for ${file.filename}`}
-                >
-                  <div className="diff-file-header-left">
-                    <span className="diff-chevron-icon">
-                      {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                    </span>
-                    <span className={`file-status-badge status-${statusName}`}>
-                      {statusName}
-                    </span>
-                    <span className="diff-filename-text" title={file.filename}>
-                      {file.filename}
-                    </span>
-                    {file.previous_filename && (
-                      <span className="diff-renamed-text" title={`Renamed from ${file.previous_filename}`}>
-                        ← {file.previous_filename}
-                      </span>
-                    )}
-                  </div>
-
-                  <div
-                    className="diff-file-header-right"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="diff-file-metrics">
-                      {file.additions > 0 && (
-                        <span className="file-additions-tag">+{file.additions}</span>
-                      )}
-                      {file.deletions > 0 && (
-                        <span className="file-deletions-tag">-{file.deletions}</span>
-                      )}
-                      {file.changes > 0 && file.additions === 0 && file.deletions === 0 && (
-                        <span className="file-changes-tag">{file.changes} changes</span>
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => copyFilePath(file.filename)}
-                      className="diff-copy-path-btn"
-                      title="Copy file path"
-                      aria-label="Copy file path"
-                    >
-                      {copiedFile === file.filename ? (
-                        <Check size={11} className="text-emerald" />
-                      ) : (
-                        <Copy size={11} />
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* File Diff Content */}
-                {isExpanded && (
-                  <div className="diff-content-body">
-                    {!file.patch ? (
-                      <div className="diff-no-patch-note">
-                        <Layers size={13} />
-                        <span>
-                          {file.status === 'added' && file.changes === 0
-                            ? 'Empty file added.'
-                            : file.status === 'removed' && file.changes === 0
-                            ? 'Empty file removed.'
-                            : 'Binary file or large patch diff not directly rendered by GitHub REST API.'}
-                        </span>
-                      </div>
-                    ) : viewMode === 'unified' ? (
-                      /* UNIFIED INLINE DIFF VIEW */
-                      <div className="diff-table-container">
-                        <table className="diff-table unified-table">
-                          <tbody>
-                            {parsedLines.map((line, lineIdx) => {
-                              if (line.type === 'hunk-header') {
-                                return (
-                                  <tr key={lineIdx} className="diff-row hunk-row">
-                                    <td className="diff-gutter hunk-gutter" colSpan={2}>
-                                      ...
-                                    </td>
-                                    <td className="diff-line-code hunk-code">
-                                      <code>{line.text}</code>
-                                    </td>
-                                  </tr>
-                                );
-                              }
-
-                              const isAdd = line.type === 'addition';
-                              const isDel = line.type === 'deletion';
-
-                              return (
-                                <tr
-                                  key={lineIdx}
-                                  className={`diff-row ${isAdd ? 'row-add' : isDel ? 'row-del' : 'row-context'}`}
-                                >
-                                  <td className="diff-gutter old-gutter">
-                                    {line.oldLineNumber != null ? line.oldLineNumber : ''}
-                                  </td>
-                                  <td className="diff-gutter new-gutter">
-                                    {line.newLineNumber != null ? line.newLineNumber : ''}
-                                  </td>
-                                  <td className="diff-line-code">
-                                    <span className="diff-marker">
-                                      {isAdd ? '+' : isDel ? '-' : ' '}
-                                    </span>
-                                    <code className="diff-text">{line.text || ' '}</code>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      /* SPLIT SIDE-BY-SIDE DIFF VIEW */
-                      <div className="diff-table-container split-scroll-container">
-                        <table className="diff-table split-table">
-                          <tbody>
-                            {splitRows.map((row, rIdx) => {
-                              if (row.isHunkHeader) {
-                                return (
-                                  <tr key={rIdx} className="diff-row hunk-row">
-                                    <td className="diff-gutter hunk-gutter">...</td>
-                                    <td className="diff-line-code hunk-code">
-                                      <code>{row.hunkText}</code>
-                                    </td>
-                                    <td className="diff-gutter hunk-gutter">...</td>
-                                    <td className="diff-line-code hunk-code">
-                                      <code>{row.hunkText}</code>
-                                    </td>
-                                  </tr>
-                                );
-                              }
-
-                              const left = row.left;
-                              const right = row.right;
-
-                              const isLeftDel = left?.type === 'deletion';
-                              const isRightAdd = right?.type === 'addition';
-
-                              return (
-                                <tr key={rIdx} className="diff-row split-row">
-                                  {/* Left Column (Old/Deletions) */}
-                                  <td className={`diff-gutter old-gutter ${isLeftDel ? 'gutter-del' : ''}`}>
-                                    {left?.lineNumber != null ? left.lineNumber : ''}
-                                  </td>
-                                  <td className={`diff-line-code split-left-code ${isLeftDel ? 'row-del' : left?.type === 'empty' ? 'row-empty' : 'row-context'}`}>
-                                    {left && left.type !== 'empty' && (
-                                      <>
-                                        <span className="diff-marker">
-                                          {isLeftDel ? '-' : ' '}
-                                        </span>
-                                        <code className="diff-text">{left.text || ' '}</code>
-                                      </>
-                                    )}
-                                  </td>
-
-                                  {/* Right Column (New/Additions) */}
-                                  <td className={`diff-gutter new-gutter ${isRightAdd ? 'gutter-add' : ''}`}>
-                                    {right?.lineNumber != null ? right.lineNumber : ''}
-                                  </td>
-                                  <td className={`diff-line-code split-right-code ${isRightAdd ? 'row-add' : right?.type === 'empty' ? 'row-empty' : 'row-context'}`}>
-                                    {right && right.type !== 'empty' && (
-                                      <>
-                                        <span className="diff-marker">
-                                          {isRightAdd ? '+' : ' '}
-                                        </span>
-                                        <code className="diff-text">{right.text || ' '}</code>
-                                      </>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {filteredFiles.map((file, fileIdx) => (
+            <DiffFileCard
+              key={`${file.filename}-${fileIdx}`}
+              file={file}
+              fileIdx={fileIdx}
+              isExpanded={expandedFiles[file.filename] ?? false}
+              viewMode={viewMode}
+              onToggle={toggleFile}
+              onCopyPath={copyFilePath}
+              isCopied={copiedFile === file.filename}
+            />
+          ))}
         </div>
       )}
     </div>

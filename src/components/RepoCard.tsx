@@ -1,4 +1,4 @@
-import { memo, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CircleDot, Clock3, ExternalLink, GitBranch, GitFork, Globe2, Star } from 'lucide-react';
 import type { GithubRepository } from '../types/github';
@@ -7,7 +7,11 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { sanitizeUrl } from '../services/security';
 
 type PreviewRepoCardProps = { name: string; description: string; language: string; color: string; stars: string };
-type GithubRepoCardProps = { repository: GithubRepository; index: number };
+type GithubRepoCardProps = {
+  repository: GithubRepository;
+  index: number;
+  targetState?: { branch?: string; sha?: string; id: number } | null;
+};
 type RepoCardProps = PreviewRepoCardProps | GithubRepoCardProps;
 
 function formatUpdatedDate(date: string) {
@@ -22,13 +26,21 @@ export const RepoCard = memo(function RepoCard(props: RepoCardProps) {
   const [showBranches, setShowBranches] = useState(false);
 
   if ('repository' in props) {
-    const { repository, index } = props;
+    const { repository, index, targetState } = props;
     const [owner, repoName] = repository.full_name.includes('/')
       ? repository.full_name.split('/')
       : ['', repository.name];
 
+    useEffect(() => {
+      if (targetState) {
+        setShowBranches(true);
+      }
+    }, [targetState?.id]);
+
     return (
       <motion.article
+        id={`repo-card-${repository.name.toLowerCase()}`}
+        data-repo-name={repository.full_name.toLowerCase()}
         className={`repository-card ${showBranches ? 'branches-expanded' : ''}`}
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -101,6 +113,8 @@ export const RepoCard = memo(function RepoCard(props: RepoCardProps) {
                   repo={repoName}
                   defaultBranch={repository.default_branch}
                   fullName={repository.full_name}
+                  initialBranch={targetState?.branch || repository.default_branch}
+                  initialSha={targetState?.sha}
                   onClose={() => setShowBranches(false)}
                 />
               </ErrorBoundary>

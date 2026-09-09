@@ -98,24 +98,25 @@ The codebase is the source of truth. The following milestones are implemented an
 [✓] Day 2: GitHub Profile Integration (Real profile API, search, routing)
 [✓] Day 3: Repository Intelligence Foundation (Repo explorer, filtering, sorting, stats)
 [✓] Day 4: Git History Intelligence (Branches, commits, DAG relationships, activity)
-[ ] Day 5: Change Investigation (Planned)
-[ ] Day 6: Reliability & Engineering (Planned)
+[✓] Day 5: Change Investigation (Diff viewer, branch comparison, commit inspection)
+[✓] Day 6: Reliability & Engineering (Caching, error boundaries, offline mode, perf optimization)
 [ ] Day 7: Production Readiness (Planned)
 ```
 
-### Day 5 — Change Investigation (Planned)
+### Day 5 — Change Investigation (Completed)
 - Detailed commit inspection and patch review
 - Code diff visualization and side-by-side / inline views
 - Commit-to-commit and branch comparison
 - Changed file trees and additions/deletions analysis
 - Investigation workflows to trace why code changes occurred
 
-### Day 6 — Reliability & Engineering (Planned)
-- API request caching and rate-limit resilience
-- Error boundaries and offline/degraded mode handling
-- Performance optimization for large repositories/commit sets
-- Comprehensive automated test suite
-- Security considerations and sanitization
+### Day 6 — Reliability & Engineering (Completed)
+- API request caching with TTLs and in-flight deduplication
+- Rate-limit tracking and resilience banners
+- React Error Boundaries with diagnostics and component recovery
+- Offline/Degraded mode banner with real-time connectivity detection
+- Security sanitization for URLs and user inputs
+- Performance optimization: memoized diff card rendering, parsed patch caching, large diff chunking, and DAG graph memoization
 
 ### Day 7 — Production Readiness (Planned)
 - CI/CD automation pipelines

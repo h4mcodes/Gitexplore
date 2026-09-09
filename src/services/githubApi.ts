@@ -365,18 +365,39 @@ export async function fetchGithubCompare(
   return executeGithubRequest(cacheKey, url, isGithubComparisonResult, CACHE_TTL.COMPARE, options);
 }
 
+// In-memory graph model cache
+const graphModelCache = new Map<string, CommitRelationshipGraph>();
+
 /**
- * Builds a deterministic, bidirectional Commit Relationship Model (parent <-> child DAG)
- * from real GitHub commit history.
+ * Builds an in-memory directed acyclic graph (DAG) of commit relationships
+ * with fingerprint caching for maximum performance.
  */
 export function buildCommitRelationshipModel(commits: GithubCommit[]): CommitRelationshipGraph {
+  if (!commits || commits.length === 0) {
+    return {
+      nodes: {},
+      orderedShas: [],
+      rootShas: [],
+      headShas: [],
+      totalCommits: 0,
+    };
+  }
+
+  // Quick deterministic fingerprint from length and boundaries
+  const fingerprint = `${commits.length}:${commits[0]?.sha || ''}:${commits[commits.length - 1]?.sha || ''}`;
+  const cached = graphModelCache.get(fingerprint);
+  if (cached) return cached;
+
   const nodes: Record<string, CommitNode> = {};
   const orderedShas: string[] = [];
+  const knownShas = new Set<string>();
 
   // Pass 1: Instantiate individual commit nodes
-  for (const commit of commits) {
+  for (let i = 0; i < commits.length; i++) {
+    const commit = commits[i];
     const sha = commit.sha;
-    if (!sha || nodes[sha]) continue;
+    if (!sha || knownShas.has(sha)) continue;
+    knownShas.add(sha);
 
     const parentShas = Array.isArray(commit.parents)
       ? commit.parents
@@ -413,12 +434,14 @@ export function buildCommitRelationshipModel(commits: GithubCommit[]): CommitRel
     orderedShas.push(sha);
   }
 
-  // Pass 2: Establish bidirectional parent -> child relationship links
-  for (const sha of orderedShas) {
+  // Pass 2: Establish bidirectional parent -> child relationship links in O(N)
+  for (let i = 0; i < orderedShas.length; i++) {
+    const sha = orderedShas[i];
     const node = nodes[sha];
     if (!node) continue;
 
-    for (const parentSha of node.parentShas) {
+    for (let p = 0; p < node.parentShas.length; p++) {
+      const parentSha = node.parentShas[p];
       const parentNode = nodes[parentSha];
       if (parentNode && !parentNode.childShas.includes(sha)) {
         parentNode.childShas.push(sha);
@@ -426,17 +449,37 @@ export function buildCommitRelationshipModel(commits: GithubCommit[]): CommitRel
     }
   }
 
-  // Pass 3: Identify root commits (0 parents or parents outside the loaded set) and head commits (0 children)
-  const rootShas = orderedShas.filter((sha) => nodes[sha].parentShas.length === 0 || !nodes[sha].parentShas.some((pSha) => pSha in nodes));
-  const headShas = orderedShas.filter((sha) => nodes[sha].childShas.length === 0);
+  // Pass 3: Identify root commits and head commits
+  const rootShas: string[] = [];
+  const headShas: string[] = [];
 
-  return {
+  for (let i = 0; i < orderedShas.length; i++) {
+    const sha = orderedShas[i];
+    const node = nodes[sha];
+    if (node.parentShas.length === 0 || !node.parentShas.some((pSha) => knownShas.has(pSha))) {
+      rootShas.push(sha);
+    }
+    if (node.childShas.length === 0) {
+      headShas.push(sha);
+    }
+  }
+
+  const result: CommitRelationshipGraph = {
     nodes,
     orderedShas,
     rootShas,
     headShas,
     totalCommits: orderedShas.length,
   };
+
+  // Keep cache bounded
+  if (graphModelCache.size > 50) {
+    const oldestKey = graphModelCache.keys().next().value;
+    if (oldestKey) graphModelCache.delete(oldestKey);
+  }
+  graphModelCache.set(fingerprint, result);
+
+  return result;
 }
 
 export function getParentCommits(graph: CommitRelationshipGraph, sha: string): CommitNode[] {
@@ -538,17 +581,28 @@ export async function fetchGithubContributions(
   }
 }
 
+const SEVENTY_TWO_HOURS_MS = 72 * 60 * 60 * 1000;
+
 /**
  * Transforms real GitHub events and full-year contribution data into a processed activity model with statistics,
  * aggregated daily intensities, and calendar grid layout.
+ * Limits the live event stream and category stats strictly to a rolling 72-hour window.
  */
 export function processUserActivity(
   events: GithubEvent[],
   contributions: GithubContributionDay[] = [],
   weeksCount: number = 52
 ): ProcessedActivity {
+  const now = Date.now();
+
+  // Filter events strictly to those within the last 72 hours
+  const recentEvents = events.filter((ev) => {
+    const eventTime = new Date(ev.created_at).getTime();
+    return !Number.isNaN(eventTime) && (now - eventTime) <= SEVENTY_TWO_HOURS_MS && eventTime <= now;
+  });
+
   const stats: ActivityStats = {
-    totalEvents: events.length,
+    totalEvents: recentEvents.length,
     pushEvents: 0,
     totalCommits: 0,
     pullRequestEvents: 0,
@@ -567,7 +621,7 @@ export function processUserActivity(
     }
   }
 
-  for (const event of events) {
+  for (const event of recentEvents) {
     const dateKey = event.created_at.split('T')[0];
     let weight = 1;
 
@@ -717,7 +771,7 @@ export function processUserActivity(
   }
 
   return {
-    events,
+    events: recentEvents,
     stats,
     dailyGrid,
     monthSections,

@@ -579,6 +579,37 @@ h1 { color: #18304c; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25); } h1 span {
 .file-deletions-tag { color: #b91c1c; background: #fde8ea; padding: 1px 4px; border-radius: 3px; }
 .file-changes-tag { color: #436488; background: rgba(255,255,255,.7); padding: 1px 4px; border-radius: 3px; }
 
+.diff-large-chunk-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(235, 244, 253, 0.85);
+  border-top: 1px solid rgba(35, 70, 108, 0.15);
+  font: 9px 'DM Mono', monospace;
+  color: #244970;
+  flex-wrap: wrap;
+}
+
+.diff-show-more-btn {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 5px;
+  border: 1px solid rgba(36, 86, 145, 0.3);
+  background: #245691;
+  color: #ffffff;
+  font: 9px 'DM Mono', monospace;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.diff-show-more-btn:hover {
+  background: #184475;
+  transform: translateY(-1px);
+}
+
 .commit-inspect-skeleton { display: flex; flex-direction: column; gap: 10px; padding: 8px 0; }
 .skeleton-line { height: 16px; border-radius: 4px; background: linear-gradient(110deg,rgba(255,255,255,.3),rgba(255,255,255,.6),rgba(255,255,255,.3)); background-size: 220% 100%; animation: shimmer 1.6s infinite; }
 .title-skel { width: 70%; height: 22px; }
@@ -673,6 +704,15 @@ h1 { color: #18304c; text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25); } h1 span {
 .activity-repo-link { display: inline-flex; align-items: center; gap: 3px; font: 11px 'DM Mono', monospace; font-weight: 650; color: #245691; text-decoration: none; padding: 1px 5px; border-radius: 4px; background: rgba(36,86,145,.08); transition: background .15s, color .15s; }
 .activity-repo-link:hover { background: #245691; color: #ffffff; }
 .activity-time-tag { margin-left: auto; color: #6282a3; font: 9.5px 'DM Mono', monospace; font-weight: 500; white-space: nowrap; }
+.activity-goto-commits-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 5px; border: 1px solid rgba(36,86,145,.22); background: rgba(36,86,145,.08); color: #1a497c; font: 10px 'DM Mono', monospace; font-weight: 600; cursor: pointer; transition: all .15s ease; white-space: nowrap; }
+.activity-goto-commits-btn:hover { background: #245691; color: #ffffff; border-color: #245691; box-shadow: 0 2px 6px rgba(36,86,145,.2); }
+
+@keyframes repoPulseGlow {
+  0% { box-shadow: 0 0 0 0 rgba(37,99,235,.6), 0 0 20px rgba(37,99,235,.35); }
+  50% { box-shadow: 0 0 0 5px rgba(37,99,235,.25), 0 0 28px rgba(37,99,235,.45); }
+  100% { box-shadow: 0 0 0 0 rgba(37,99,235,0), 0 0 0 rgba(37,99,235,0); }
+}
+.repo-card-pulse-highlight { animation: repoPulseGlow 1.8s ease-out; border-color: rgba(37,99,235,.6) !important; }
 
 .activity-detail-box { padding: 4px 8px; border-radius: 6px; background: rgba(235,244,253,.6); border: 1px solid rgba(35,70,108,.1); }
 .activity-target-link { color: #183350; font-size: 11px; font-weight: 600; text-decoration: none; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

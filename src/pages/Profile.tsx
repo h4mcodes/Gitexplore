@@ -170,6 +170,55 @@ export function Profile() {
     return () => { active = false; };
   }, [username]);
 
+  const [targetRepoCommit, setTargetRepoCommit] = useState<{
+    fullName: string;
+    branch?: string;
+    sha?: string;
+    id: number;
+  } | null>(null);
+
+  const handleOpenRepoCommits = (repoFullName: string, branch?: string, sha?: string) => {
+    const normName = repoFullName.trim().toLowerCase();
+    const repoShortName = normName.includes('/') ? normName.split('/')[1] : normName;
+
+    // Reset filters so the targeted repo is visible
+    setRepositoryQuery('');
+    setSelectedLanguage('all');
+
+    const matchIndex = repositories.findIndex(
+      (r) =>
+        r.full_name.toLowerCase() === normName ||
+        r.name.toLowerCase() === repoShortName
+    );
+
+    if (matchIndex !== -1 && matchIndex >= visibleRepositoryCount) {
+      setVisibleRepositoryCount(Math.max(visibleRepositoryCount, matchIndex + 1 + REPOSITORIES_PER_PAGE));
+    }
+
+    const foundRepo = matchIndex !== -1 ? repositories[matchIndex] : null;
+    const targetFullName = foundRepo ? foundRepo.full_name : repoFullName;
+
+    setTargetRepoCommit({
+      fullName: targetFullName,
+      branch,
+      sha,
+      id: Date.now(),
+    });
+
+    setTimeout(() => {
+      const el =
+        document.querySelector(`[data-repo-name="${targetFullName.toLowerCase()}"]`) ||
+        document.getElementById(`repo-card-${repoShortName}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.remove('repo-card-pulse-highlight');
+        void (el as HTMLElement).offsetWidth;
+        el.classList.add('repo-card-pulse-highlight');
+        setTimeout(() => el.classList.remove('repo-card-pulse-highlight'), 2200);
+      }
+    }, 120);
+  };
+
   const languageOptions: DropdownOption[] = useMemo(() => [
     { value: 'all', label: 'All languages' },
     ...languages.map((language) => ({ value: language, label: language })),
@@ -186,5 +235,268 @@ export function Profile() {
   const leftColumnRepos = useMemo(() => visibleRepositories.filter((_, i) => i % 2 === 0), [visibleRepositories]);
   const rightColumnRepos = useMemo(() => visibleRepositories.filter((_, i) => i % 2 !== 0), [visibleRepositories]);
 
-  return <main className="page-shell profile-page"><div className="ambient ambient-blue" /><div className="ambient ambient-purple" /><div className="ambient ambient-green" /><Navbar /><div className="profile-content"><Link className="back-link" to="/"><ArrowLeft size={15} /> Back to search</Link>{status === 'loading' && <ProfileSkeleton />}{status !== 'loading' && status !== 'ready' && <motion.div className="profile-error" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}><span className="error-mark">!</span><h1>{status === 'not-found' ? "We couldn't find that GitHub profile." : status === 'rate-limit' ? 'GitHub API rate limit reached.' : 'Something went wrong. Please try again.'}</h1><p>{status === 'not-found' ? 'Check the username and try again.' : status === 'rate-limit' ? `GitHub rate limit reached (60 req/hr). Resets at ${rateLimitResetTime || 'soon'}.` : 'Check your internet connection or try again.'}</p><div className="error-actions"><button type="button" onClick={() => navigate('/')}>Back to search</button><button type="button" className="secondary-action" onClick={() => navigate(0)}>Try again</button></div></motion.div>}{status === 'ready' && profile && <motion.div className="profile-content-inner" initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .55, ease: 'easeOut' }}><section className="profile-hero-card"><div className="profile-avatar-wrap"><img src={profile.avatar_url} alt={`${profile.login}'s GitHub avatar`} /></div><div className="profile-details"><span className="eyebrow">GITHUB PROFILE</span><h1>{profile.name || profile.login}</h1><p className="profile-handle">@{profile.login}</p>{profile.bio && <p className="profile-bio">{profile.bio}</p>}<div className="profile-meta-list">{profile.location && <span><MapPin size={15} />{profile.location}</span>}{profile.company && <span><Building2 size={15} />{profile.company}</span>}{profile.blog && sanitizeUrl(profile.blog) && <a href={sanitizeUrl(profile.blog)} target="_blank" rel="noreferrer"><Link2 size={15} />{profile.blog}<ExternalLink size={12} /></a>}<span><Users size={15} />Joined {formatJoinedDate(profile.created_at)}</span></div></div><a className="github-profile-link" href={sanitizeUrl(profile.html_url) || '#'} target="_blank" rel="noreferrer" aria-label={`Open ${profile.login}'s GitHub profile`}>View on GitHub <ExternalLink size={13} /></a></section><section className="profile-stats"><StatsCard label="Repositories" value={profile.public_repos.toLocaleString()} detail="Public projects" icon="⌘" /><StatsCard label="Followers" value={profile.followers.toLocaleString()} detail="People following" icon="↗" /><StatsCard label="Following" value={profile.following.toLocaleString()} detail="Developer network" icon="◌" /></section><ErrorBoundary fallbackTitle="Contribution Activity Graph Error" fallbackMessage="Could not load the 12-month activity timeline for this profile." isCompact><ContributionGraph username={profile.login} /></ErrorBoundary>{repositoryStatus === 'loading' && <RepositorySkeletons />}{repositoryStatus === 'rate-limit' && <section className="repository-section repository-message"><FolderGit2 size={22} /><h2>GitHub API rate limit reached.</h2><p>Please wait a moment before reloading repositories.</p><button type="button" onClick={() => loadRepositories(profile.login, true)}><RotateCw size={14} />Retry</button></section>}{repositoryStatus === 'error' && <section className="repository-section repository-message"><FolderGit2 size={22} /><h2>We couldn't load repositories.</h2><p>Please try again.</p><button type="button" onClick={() => loadRepositories(profile.login, true)}><RotateCw size={14} />Retry</button></section>}{repositoryStatus === 'ready' && repositories.length === 0 && <section className="repository-section repository-message"><FolderGit2 size={22} /><h2>No public repositories yet.</h2><p>This developer has not shared any public projects.</p></section>}{repositoryStatus === 'ready' && repositories.length > 0 && <section className="repository-section"><div className="repository-section-heading"><div><span className="eyebrow">PUBLIC WORK</span><h2>Repositories</h2></div><span>{visibleRepositories.length.toLocaleString()} of {filteredRepositories.length.toLocaleString()} shown</span></div><section className="repository-summary" aria-label="Repository statistics"><StatsCard label="Repositories" value={repositories.length.toLocaleString()} detail="Loaded public projects" icon="⌘" /><StatsCard label="Total stars" value={repositoryTotals.stars.toLocaleString()} detail="Across loaded projects" icon="★" /><StatsCard label="Total forks" value={repositoryTotals.forks.toLocaleString()} detail="Across loaded projects" icon="⌘" /></section><div className="repository-toolbar"><label className="repository-search"><Search size={15} /><span className="sr-only">Search repositories</span><input value={repositoryQuery} onChange={(event) => { setRepositoryQuery(event.target.value); setVisibleRepositoryCount(REPOSITORIES_PER_PAGE); }} placeholder="Search repositories..." /></label><div className="repository-filter-controls"><GlassDropdown value={selectedLanguage} options={languageOptions} onChange={(value) => { setSelectedLanguage(value); setVisibleRepositoryCount(REPOSITORIES_PER_PAGE); }} ariaLabel="Filter repositories by language" /><GlassDropdown value={repositorySort} options={sortOptions} onChange={(value) => { setRepositorySort(value as RepositorySort); setVisibleRepositoryCount(REPOSITORIES_PER_PAGE); }} ariaLabel="Sort repositories" />{(repositoryQuery || selectedLanguage !== 'all' || repositorySort !== 'updated') && <button type="button" className="clear-repository-filters" onClick={resetRepositoryFilters}><X size={14} />Clear</button>}</div></div>{filteredRepositories.length > 0 ? <><div className="repository-grid"><div className="repository-column">{leftColumnRepos.map((repository, index) => <RepoCard key={repository.id} repository={repository} index={index * 2} />)}</div><div className="repository-column">{rightColumnRepos.map((repository, index) => <RepoCard key={repository.id} repository={repository} index={index * 2 + 1} />)}</div></div>{visibleRepositories.length < filteredRepositories.length && <div className="repository-load-more"><button type="button" onClick={() => setVisibleRepositoryCount((count) => count + REPOSITORIES_PER_PAGE)}>Load more <span>{Math.min(REPOSITORIES_PER_PAGE, filteredRepositories.length - visibleRepositories.length)} remaining</span></button></div>}</> : <div className="repository-message repository-no-results"><FolderGit2 size={22} /><h2>No repositories found.</h2><p>Try another search or reset the filters.</p><button type="button" onClick={resetRepositoryFilters}><X size={14} />Clear filters</button></div>}</section>}</motion.div>}</div><footer><span>GitExplore <b>·</b> Developer intelligence, made clear.</span><span className="footer-mark">Real-time public profile</span></footer></main>;
+  return (
+    <main className="page-shell profile-page">
+      <div className="ambient ambient-blue" />
+      <div className="ambient ambient-purple" />
+      <div className="ambient ambient-green" />
+      <Navbar />
+      <div className="profile-content">
+        <Link className="back-link" to="/">
+          <ArrowLeft size={15} /> Back to search
+        </Link>
+        {status === 'loading' && <ProfileSkeleton />}
+        {status !== 'loading' && status !== 'ready' && (
+          <motion.div className="profile-error" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
+            <span className="error-mark">!</span>
+            <h1>
+              {status === 'not-found'
+                ? "We couldn't find that GitHub profile."
+                : status === 'rate-limit'
+                ? 'GitHub API rate limit reached.'
+                : 'Something went wrong. Please try again.'}
+            </h1>
+            <p>
+              {status === 'not-found'
+                ? 'Check the username and try again.'
+                : status === 'rate-limit'
+                ? `GitHub rate limit reached (60 req/hr). Resets at ${rateLimitResetTime || 'soon'}.`
+                : 'Check your internet connection or try again.'}
+            </p>
+            <div className="error-actions">
+              <button type="button" onClick={() => navigate('/')}>
+                Back to search
+              </button>
+              <button type="button" className="secondary-action" onClick={() => navigate(0)}>
+                Try again
+              </button>
+            </div>
+          </motion.div>
+        )}
+        {status === 'ready' && profile && (
+          <motion.div
+            className="profile-content-inner"
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, ease: 'easeOut' }}
+          >
+            <section className="profile-hero-card">
+              <div className="profile-avatar-wrap">
+                <img src={profile.avatar_url} alt={`${profile.login}'s GitHub avatar`} />
+              </div>
+              <div className="profile-details">
+                <span className="eyebrow">GITHUB PROFILE</span>
+                <h1>{profile.name || profile.login}</h1>
+                <p className="profile-handle">@{profile.login}</p>
+                {profile.bio && <p className="profile-bio">{profile.bio}</p>}
+                <div className="profile-meta-list">
+                  {profile.location && (
+                    <span>
+                      <MapPin size={15} />
+                      {profile.location}
+                    </span>
+                  )}
+                  {profile.company && (
+                    <span>
+                      <Building2 size={15} />
+                      {profile.company}
+                    </span>
+                  )}
+                  {profile.blog && sanitizeUrl(profile.blog) && (
+                    <a href={sanitizeUrl(profile.blog)} target="_blank" rel="noreferrer">
+                      <Link2 size={15} />
+                      {profile.blog}
+                      <ExternalLink size={12} />
+                    </a>
+                  )}
+                  <span>
+                    <Users size={15} />
+                    Joined {formatJoinedDate(profile.created_at)}
+                  </span>
+                </div>
+              </div>
+              <a
+                className="github-profile-link"
+                href={sanitizeUrl(profile.html_url) || '#'}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Open ${profile.login}'s GitHub profile`}
+              >
+                View on GitHub <ExternalLink size={13} />
+              </a>
+            </section>
+
+            <section className="profile-stats">
+              <StatsCard label="Repositories" value={profile.public_repos.toLocaleString()} detail="Public projects" icon="⌘" />
+              <StatsCard label="Followers" value={profile.followers.toLocaleString()} detail="People following" icon="↗" />
+              <StatsCard label="Following" value={profile.following.toLocaleString()} detail="Developer network" icon="◌" />
+            </section>
+
+            <ErrorBoundary
+              fallbackTitle="Contribution Activity Graph Error"
+              fallbackMessage="Could not load the 12-month activity timeline for this profile."
+              isCompact
+            >
+              <ContributionGraph username={profile.login} onOpenRepoCommits={handleOpenRepoCommits} />
+            </ErrorBoundary>
+
+            {repositoryStatus === 'loading' && <RepositorySkeletons />}
+            {repositoryStatus === 'rate-limit' && (
+              <section className="repository-section repository-message">
+                <FolderGit2 size={22} />
+                <h2>GitHub API rate limit reached.</h2>
+                <p>Please wait a moment before reloading repositories.</p>
+                <button type="button" onClick={() => loadRepositories(profile.login, true)}>
+                  <RotateCw size={14} />
+                  Retry
+                </button>
+              </section>
+            )}
+            {repositoryStatus === 'error' && (
+              <section className="repository-section repository-message">
+                <FolderGit2 size={22} />
+                <h2>We couldn't load repositories.</h2>
+                <p>Please try again.</p>
+                <button type="button" onClick={() => loadRepositories(profile.login, true)}>
+                  <RotateCw size={14} />
+                  Retry
+                </button>
+              </section>
+            )}
+            {repositoryStatus === 'ready' && repositories.length === 0 && (
+              <section className="repository-section repository-message">
+                <FolderGit2 size={22} />
+                <h2>No public repositories yet.</h2>
+                <p>This developer has not shared any public projects.</p>
+              </section>
+            )}
+            {repositoryStatus === 'ready' && repositories.length > 0 && (
+              <section className="repository-section">
+                <div className="repository-section-heading">
+                  <div>
+                    <span className="eyebrow">PUBLIC WORK</span>
+                    <h2>Repositories</h2>
+                  </div>
+                  <span>
+                    {visibleRepositories.length.toLocaleString()} of {filteredRepositories.length.toLocaleString()} shown
+                  </span>
+                </div>
+
+                <section className="repository-summary" aria-label="Repository statistics">
+                  <StatsCard label="Repositories" value={repositories.length.toLocaleString()} detail="Loaded public projects" icon="⌘" />
+                  <StatsCard label="Total stars" value={repositoryTotals.stars.toLocaleString()} detail="Across loaded projects" icon="★" />
+                  <StatsCard label="Total forks" value={repositoryTotals.forks.toLocaleString()} detail="Across loaded projects" icon="⌘" />
+                </section>
+
+                <div className="repository-toolbar">
+                  <label className="repository-search">
+                    <Search size={15} />
+                    <span className="sr-only">Search repositories</span>
+                    <input
+                      value={repositoryQuery}
+                      onChange={(event) => {
+                        setRepositoryQuery(event.target.value);
+                        setVisibleRepositoryCount(REPOSITORIES_PER_PAGE);
+                      }}
+                      placeholder="Search repositories..."
+                    />
+                  </label>
+                  <div className="repository-filter-controls">
+                    <GlassDropdown
+                      value={selectedLanguage}
+                      options={languageOptions}
+                      onChange={(value) => {
+                        setSelectedLanguage(value);
+                        setVisibleRepositoryCount(REPOSITORIES_PER_PAGE);
+                      }}
+                      ariaLabel="Filter repositories by language"
+                    />
+                    <GlassDropdown
+                      value={repositorySort}
+                      options={sortOptions}
+                      onChange={(value) => {
+                        setRepositorySort(value as RepositorySort);
+                        setVisibleRepositoryCount(REPOSITORIES_PER_PAGE);
+                      }}
+                      ariaLabel="Sort repositories"
+                    />
+                    {(repositoryQuery || selectedLanguage !== 'all' || repositorySort !== 'updated') && (
+                      <button type="button" className="clear-repository-filters" onClick={resetRepositoryFilters}>
+                        <X size={14} />
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {filteredRepositories.length > 0 ? (
+                  <>
+                    <div className="repository-grid">
+                      <div className="repository-column">
+                        {leftColumnRepos.map((repository, index) => (
+                          <RepoCard
+                            key={repository.id}
+                            repository={repository}
+                            index={index * 2}
+                            targetState={
+                              targetRepoCommit?.fullName.toLowerCase() === repository.full_name.toLowerCase()
+                                ? targetRepoCommit
+                                : null
+                            }
+                          />
+                        ))}
+                      </div>
+                      <div className="repository-column">
+                        {rightColumnRepos.map((repository, index) => (
+                          <RepoCard
+                            key={repository.id}
+                            repository={repository}
+                            index={index * 2 + 1}
+                            targetState={
+                              targetRepoCommit?.fullName.toLowerCase() === repository.full_name.toLowerCase()
+                                ? targetRepoCommit
+                                : null
+                            }
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    {visibleRepositories.length < filteredRepositories.length && (
+                      <div className="repository-load-more">
+                        <button
+                          type="button"
+                          onClick={() => setVisibleRepositoryCount((count) => count + REPOSITORIES_PER_PAGE)}
+                        >
+                          Load more{' '}
+                          <span>
+                            {Math.min(REPOSITORIES_PER_PAGE, filteredRepositories.length - visibleRepositories.length)} remaining
+                          </span>
+                        </button>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="repository-message repository-no-results">
+                    <FolderGit2 size={22} />
+                    <h2>No repositories found.</h2>
+                    <p>Try another search or reset the filters.</p>
+                    <button type="button" onClick={resetRepositoryFilters}>
+                      <X size={14} />
+                      Clear filters
+                    </button>
+                  </div>
+                )}
+              </section>
+            )}
+          </motion.div>
+        )}
+      </div>
+      <footer>
+        <span>
+          GitExplore <b>·</b> Developer intelligence, made clear.
+        </span>
+        <span className="footer-mark">Real-time public profile</span>
+      </footer>
+    </main>
+  );
 }

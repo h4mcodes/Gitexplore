@@ -166,6 +166,7 @@ export interface GithubEventPayload {
   master_branch?: string;
   description?: string | null;
   pusher_type?: string;
+  head?: string;
   size?: number;
   distinct_size?: number;
   commits?: GithubEventPayloadCommit[];

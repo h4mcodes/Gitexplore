@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   ChevronDown,
@@ -14,7 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { buildCommitRelationshipModel, fetchGithubCommits, GithubApiError } from '../services/githubApi';
-import type { GithubBranch, GithubCommit } from '../types/github';
+import type { GithubBranch, GithubCommit, CommitNode, CommitRelationshipGraph } from '../types/github';
 import { CommitInspection } from './CommitInspection';
 import { GlassDropdown, type DropdownOption } from './GlassDropdown';
 
@@ -24,6 +24,7 @@ interface CommitHistoryProps {
   selectedBranch: string;
   fullName: string;
   branches?: GithubBranch[];
+  initialInspectingSha?: string;
   onSelectBranch?: (branchName: string) => void;
   onBack?: () => void;
   onClose?: () => void;
@@ -39,8 +40,8 @@ function formatCommitDate(dateString: string): string {
 
     if (diffSeconds < 60) return 'just now';
     if (diffSeconds < 3600) {
-      const minutes = Math.floor(diffSeconds / 60);
-      return `${minutes}m ago`;
+      const mins = Math.floor(diffSeconds / 60);
+      return `${mins}m ago`;
     }
     if (diffSeconds < 86400) {
       const hours = Math.floor(diffSeconds / 3600);
@@ -56,12 +57,197 @@ function formatCommitDate(dateString: string): string {
   }
 }
 
+interface CommitItemRowProps {
+  item: GithubCommit;
+  node?: CommitNode;
+  isSelected: boolean;
+  commitGraph: CommitRelationshipGraph;
+  onToggleSelect: (sha: string) => void;
+  onInspect: (sha: string) => void;
+  onScrollTo: (sha: string) => void;
+}
+
+const CommitItemRow = memo(function CommitItemRow({
+  item,
+  node,
+  isSelected,
+  commitGraph,
+  onToggleSelect,
+  onInspect,
+  onScrollTo,
+}: CommitItemRowProps) {
+  const authorName = item.author?.login || item.commit.author?.name || 'Unknown';
+  const avatarUrl = item.author?.avatar_url;
+  const commitDate = item.commit.author?.date;
+  const lines = item.commit.message.split('\n');
+  const title = lines[0];
+
+  return (
+    <li
+      id={`commit-node-${item.sha}`}
+      className={`commit-item ${isSelected ? 'is-selected' : ''}`}
+    >
+      <div className="commit-item-main">
+        {/* Left: Avatar */}
+        <div className="commit-avatar-wrap">
+          {avatarUrl ? (
+            <img src={avatarUrl} alt={authorName} className="commit-avatar" />
+          ) : (
+            <span className="commit-avatar-fallback">
+              {authorName.charAt(0).toUpperCase()}
+            </span>
+          )}
+        </div>
+
+        {/* Middle: Content */}
+        <div className="commit-item-content">
+          <div className="commit-title-row">
+            <span className="commit-message-text" title={item.commit.message}>
+              {title}
+            </span>
+            {node?.isMerge && (
+              <span className="commit-type-tag merge-tag" title="Merge commit (multiple parents)">
+                <GitMerge size={9} /> MERGE
+              </span>
+            )}
+            {node?.isRoot && (
+              <span className="commit-type-tag root-tag" title="Initial commit (no parents)">
+                INITIAL
+              </span>
+            )}
+          </div>
+
+          <div className="commit-item-subline">
+            <span className="commit-author-name">{authorName}</span>
+            <span className="commit-dot-sep">·</span>
+            {commitDate && (
+              <span className="commit-date" title={new Date(commitDate).toLocaleString()}>
+                {formatCommitDate(commitDate)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Right: Actions */}
+        <div className="commit-item-right">
+          <button
+            type="button"
+            onClick={() => onInspect(item.sha)}
+            className="commit-inspect-trigger-btn"
+            title={`Investigate commit ${item.sha.slice(0, 7)}`}
+            aria-label={`Investigate commit ${item.sha.slice(0, 7)}`}
+          >
+            <Eye size={11} />
+            <span>Inspect</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onToggleSelect(item.sha)}
+            className={`commit-relation-toggle ${isSelected ? 'active' : ''}`}
+            title="Inspect parent-child commit lineage"
+            aria-label="Inspect commit relationships"
+          >
+            <CornerDownRight size={10} />
+            <span>Lineage</span>
+            {isSelected ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+          </button>
+
+          <a
+            href={item.html_url}
+            target="_blank"
+            rel="noreferrer"
+            className="commit-sha-pill"
+            title={`View commit ${item.sha} on GitHub`}
+            aria-label={`View commit ${item.sha.slice(0, 7)} on GitHub`}
+          >
+            <GitCommit size={11} />
+            <code>{item.sha.slice(0, 7)}</code>
+            <ExternalLink size={10} className="commit-ext-icon" />
+          </a>
+        </div>
+      </div>
+
+      {/* Commit Relationship Lineage Panel */}
+      {isSelected && node && (
+        <div className="commit-lineage-drawer">
+          <div className="lineage-section">
+            <span className="lineage-label">Parents:</span>
+            {node.parentShas.length === 0 ? (
+              <span className="lineage-empty">None (initial commit)</span>
+            ) : (
+              <div className="lineage-pill-group">
+                {node.parentShas.map((pSha) => {
+                  const inList = pSha in commitGraph.nodes;
+                  return (
+                    <div key={pSha} className="lineage-sha-combo">
+                      <button
+                        type="button"
+                        onClick={() => inList && onScrollTo(pSha)}
+                        className={`lineage-sha-link ${inList ? 'is-navigable' : 'is-external'}`}
+                        title={inList ? `Jump to parent commit ${pSha}` : `Parent commit ${pSha} (not in loaded batch)`}
+                      >
+                        <code>{pSha.slice(0, 7)}</code>
+                        {inList && <span className="lineage-jump-hint">jump</span>}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onInspect(pSha)}
+                        className="lineage-inspect-mini-btn"
+                        title={`Investigate parent commit ${pSha}`}
+                      >
+                        <Eye size={9} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="lineage-section">
+            <span className="lineage-label">Children:</span>
+            {node.childShas.length === 0 ? (
+              <span className="lineage-empty">Head / Latest loaded in branch</span>
+            ) : (
+              <div className="lineage-pill-group">
+                {node.childShas.map((cSha) => (
+                  <div key={cSha} className="lineage-sha-combo">
+                    <button
+                      type="button"
+                      onClick={() => onScrollTo(cSha)}
+                      className="lineage-sha-link is-navigable"
+                      title={`Jump to child commit ${cSha}`}
+                    >
+                      <code>{cSha.slice(0, 7)}</code>
+                      <span className="lineage-jump-hint">jump</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onInspect(cSha)}
+                      className="lineage-inspect-mini-btn"
+                      title={`Investigate child commit ${cSha}`}
+                    >
+                      <Eye size={9} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </li>
+  );
+});
+
 export function CommitHistory({
   owner,
   repo,
   selectedBranch,
   fullName,
   branches,
+  initialInspectingSha,
   onSelectBranch,
   onBack,
   onClose,
@@ -74,14 +260,20 @@ export function CommitHistory({
   const [hasMore, setHasMore] = useState(true);
   const [query, setQuery] = useState('');
   const [selectedSha, setSelectedSha] = useState<string | null>(null);
-  const [inspectingSha, setInspectingSha] = useState<string | null>(null);
+  const [inspectingSha, setInspectingSha] = useState<string | null>(initialInspectingSha || null);
+
+  useEffect(() => {
+    if (initialInspectingSha) {
+      setInspectingSha(initialInspectingSha);
+    }
+  }, [initialInspectingSha]);
 
   const loadInitialCommits = (bypassCache = false) => {
     setStatus('loading');
     setPage(1);
     setHasMore(true);
     setSelectedSha(null);
-    setInspectingSha(null);
+    setInspectingSha(initialInspectingSha || null);
     fetchGithubCommits(owner, repo, selectedBranch, 1, COMMITS_PER_PAGE, { bypassCache })
       .then((data) => {
         setCommits(data);
@@ -328,174 +520,18 @@ export function CommitHistory({
             </div>
           ) : (
             <ul className="commit-list">
-              {filteredCommits.map((item) => {
-                const node = commitGraph.nodes[item.sha];
-                const authorName = item.author?.login || item.commit.author?.name || 'Unknown';
-                const avatarUrl = item.author?.avatar_url;
-                const commitDate = item.commit.author?.date;
-                const lines = item.commit.message.split('\n');
-                const title = lines[0];
-                const isSelected = selectedSha === item.sha;
-
-                return (
-                  <li
-                    key={item.sha}
-                    id={`commit-node-${item.sha}`}
-                    className={`commit-item ${isSelected ? 'is-selected' : ''}`}
-                  >
-                    <div className="commit-item-main">
-                      {/* Left: Avatar */}
-                      <div className="commit-avatar-wrap">
-                        {avatarUrl ? (
-                          <img src={avatarUrl} alt={authorName} className="commit-avatar" />
-                        ) : (
-                          <span className="commit-avatar-fallback">
-                            {authorName.charAt(0).toUpperCase()}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Middle: Content */}
-                      <div className="commit-item-content">
-                        <div className="commit-title-row">
-                          <span className="commit-message-text" title={item.commit.message}>
-                            {title}
-                          </span>
-                          {node?.isMerge && (
-                            <span className="commit-type-tag merge-tag" title="Merge commit (multiple parents)">
-                              <GitMerge size={9} /> MERGE
-                            </span>
-                          )}
-                          {node?.isRoot && (
-                            <span className="commit-type-tag root-tag" title="Initial commit (no parents)">
-                              INITIAL
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="commit-item-subline">
-                          <span className="commit-author-name">{authorName}</span>
-                          <span className="commit-dot-sep">·</span>
-                          {commitDate && (
-                            <span className="commit-date" title={new Date(commitDate).toLocaleString()}>
-                              {formatCommitDate(commitDate)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Right: Actions */}
-                      <div className="commit-item-right">
-                        <button
-                          type="button"
-                          onClick={() => setInspectingSha(item.sha)}
-                          className="commit-inspect-trigger-btn"
-                          title={`Investigate commit ${item.sha.slice(0, 7)}`}
-                          aria-label={`Investigate commit ${item.sha.slice(0, 7)}`}
-                        >
-                          <Eye size={11} />
-                          <span>Inspect</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setSelectedSha(isSelected ? null : item.sha)}
-                          className={`commit-relation-toggle ${isSelected ? 'active' : ''}`}
-                          title="Inspect parent-child commit lineage"
-                          aria-label="Inspect commit relationships"
-                        >
-                          <CornerDownRight size={10} />
-                          <span>Lineage</span>
-                          {isSelected ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-                        </button>
-
-                        <a
-                          href={item.html_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="commit-sha-pill"
-                          title={`View commit ${item.sha} on GitHub`}
-                          aria-label={`View commit ${item.sha.slice(0, 7)} on GitHub`}
-                        >
-                          <GitCommit size={11} />
-                          <code>{item.sha.slice(0, 7)}</code>
-                          <ExternalLink size={10} className="commit-ext-icon" />
-                        </a>
-                      </div>
-                    </div>
-
-                    {/* Commit Relationship Lineage Panel */}
-                    {isSelected && node && (
-                      <div className="commit-lineage-drawer">
-                        <div className="lineage-section">
-                          <span className="lineage-label">Parents:</span>
-                          {node.parentShas.length === 0 ? (
-                            <span className="lineage-empty">None (initial commit)</span>
-                          ) : (
-                            <div className="lineage-pill-group">
-                              {node.parentShas.map((pSha) => {
-                                const inList = pSha in commitGraph.nodes;
-                                return (
-                                  <div key={pSha} className="lineage-sha-combo">
-                                    <button
-                                      type="button"
-                                      onClick={() => inList && scrollToSha(pSha)}
-                                      className={`lineage-sha-link ${inList ? 'is-navigable' : 'is-external'}`}
-                                      title={inList ? `Jump to parent commit ${pSha}` : `Parent commit ${pSha} (not in loaded batch)`}
-                                    >
-                                      <code>{pSha.slice(0, 7)}</code>
-                                      {inList && <span className="lineage-jump-hint">jump</span>}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => setInspectingSha(pSha)}
-                                      className="lineage-inspect-mini-btn"
-                                      title={`Investigate parent commit ${pSha}`}
-                                    >
-                                      <Eye size={9} />
-                                    </button>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="lineage-section">
-                          <span className="lineage-label">Children:</span>
-                          {node.childShas.length === 0 ? (
-                            <span className="lineage-empty">Head / Latest loaded in branch</span>
-                          ) : (
-                            <div className="lineage-pill-group">
-                              {node.childShas.map((cSha) => (
-                                <div key={cSha} className="lineage-sha-combo">
-                                  <button
-                                    type="button"
-                                    onClick={() => scrollToSha(cSha)}
-                                    className="lineage-sha-link is-navigable"
-                                    title={`Jump to child commit ${cSha}`}
-                                  >
-                                    <code>{cSha.slice(0, 7)}</code>
-                                    <span className="lineage-jump-hint">jump</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setInspectingSha(cSha)}
-                                    className="lineage-inspect-mini-btn"
-                                    title={`Investigate child commit ${cSha}`}
-                                  >
-                                    <Eye size={9} />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
+              {filteredCommits.map((item) => (
+                <CommitItemRow
+                  key={item.sha}
+                  item={item}
+                  node={commitGraph.nodes[item.sha]}
+                  isSelected={selectedSha === item.sha}
+                  commitGraph={commitGraph}
+                  onToggleSelect={(sha) => setSelectedSha(selectedSha === sha ? null : sha)}
+                  onInspect={(sha) => setInspectingSha(sha)}
+                  onScrollTo={scrollToSha}
+                />
+              ))}
             </ul>
           )}
 

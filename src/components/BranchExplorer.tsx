@@ -12,17 +12,41 @@ interface BranchExplorerProps {
   repo: string;
   defaultBranch: string;
   fullName: string;
+  initialBranch?: string;
+  initialSha?: string;
   onClose: () => void;
 }
 
-export function BranchExplorer({ owner, repo, defaultBranch, fullName, onClose }: BranchExplorerProps) {
+export function BranchExplorer({
+  owner,
+  repo,
+  defaultBranch,
+  fullName,
+  initialBranch,
+  initialSha,
+  onClose,
+}: BranchExplorerProps) {
   const [branches, setBranches] = useState<GithubBranch[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'rate-limit' | 'error'>('loading');
   const [rateLimitTime, setRateLimitTime] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [activeBranchForCommits, setActiveBranchForCommits] = useState<string | null>(null);
+  const [activeBranchForCommits, setActiveBranchForCommits] = useState<string | null>(
+    initialBranch || null
+  );
   const [compareState, setCompareState] = useState<{ base: string; head: string } | null>(null);
-  const [inspectingSha, setInspectingSha] = useState<string | null>(null);
+  const [inspectingSha, setInspectingSha] = useState<string | null>(initialSha || null);
+
+  useEffect(() => {
+    if (initialBranch) {
+      setActiveBranchForCommits(initialBranch);
+    }
+  }, [initialBranch]);
+
+  useEffect(() => {
+    if (initialSha) {
+      setInspectingSha(initialSha);
+    }
+  }, [initialSha]);
 
   const loadBranches = (bypassCache = false) => {
     setStatus('loading');
@@ -118,6 +142,7 @@ export function BranchExplorer({ owner, repo, defaultBranch, fullName, onClose }
           selectedBranch={activeBranchForCommits}
           fullName={fullName}
           branches={branches}
+          initialInspectingSha={inspectingSha || undefined}
           onSelectBranch={(b) => setActiveBranchForCommits(b)}
           onBack={() => setActiveBranchForCommits(null)}
           onClose={onClose}

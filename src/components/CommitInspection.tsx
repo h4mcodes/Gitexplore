@@ -429,17 +429,6 @@ export function CommitInspection({
               <span className="commit-card-subtitle">
                 <FileCode size={11} /> Impact & Changes Overview
               </span>
-              {files.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowCodeModal(true)}
-                  className="show-code-primary-btn"
-                  title="Open code diff window"
-                >
-                  <FileCode size={12} />
-                  <span>Show Code ({files.length})</span>
-                </button>
-              )}
             </div>
 
             <div className="commit-inspect-metrics-row">
@@ -477,15 +466,6 @@ export function CommitInspection({
                 <span className="commit-card-subtitle">
                   <FileText size={11} /> Changed Files ({files.length})
                 </span>
-                <button
-                  type="button"
-                  onClick={() => setShowCodeModal(true)}
-                  className="view-code-action-btn"
-                  title="Open code diff window"
-                >
-                  <FileCode size={11} />
-                  <span>Show Code</span>
-                </button>
               </div>
 
               <ul className="inspect-files-list">

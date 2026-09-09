@@ -26,6 +26,7 @@ import type { DailyActivityItem, GithubEvent, ProcessedActivity } from '../types
 interface ContributionGraphProps {
   username?: string;
   className?: string;
+  onOpenRepoCommits?: (repoFullName: string, branch?: string, sha?: string) => void;
 }
 
 type EventFilterCategory = 'all' | 'pushes' | 'prs' | 'issues' | 'creates' | 'stars';
@@ -74,7 +75,7 @@ function formatDayTooltip(item: DailyActivityItem): string {
   }
 }
 
-export function ContributionGraph({ username, className = '' }: ContributionGraphProps) {
+export function ContributionGraph({ username, className = '', onOpenRepoCommits }: ContributionGraphProps) {
   if (!username) {
     return null;
   }
@@ -212,6 +213,24 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
               {repoName}
               <ExternalLink size={10} />
             </a>
+
+            {onOpenRepoCommits && event.repo?.name && (
+              <button
+                type="button"
+                className="activity-goto-commits-btn"
+                onClick={() => {
+                  const branch = event.payload?.ref
+                    ? event.payload.ref.replace(/^refs\/heads\//, '')
+                    : undefined;
+                  const sha = event.payload?.commits?.[0]?.sha || event.payload?.head;
+                  onOpenRepoCommits(event.repo.name, branch, sha);
+                }}
+                title={`Jump directly into commit history for ${repoName}`}
+              >
+                <GitCommit size={11} />
+                <span>View Commits</span>
+              </button>
+            )}
 
             <span className="activity-time-tag">
               {formatEventTime(event.created_at)}
@@ -526,7 +545,11 @@ export function ContributionGraph({ username, className = '' }: ContributionGrap
           {/* Activity Stream Feed */}
           {filteredEvents.length === 0 ? (
             <div className="activity-empty-feed">
-              <p>No activity found for category "{activeFilter}".</p>
+              <p>
+                {data.events.length === 0
+                  ? 'No activity recorded in the past 72 hours.'
+                  : `No activity found for category "${activeFilter}" in the past 72 hours.`}
+              </p>
             </div>
           ) : (
             <div className="activity-feed-list">
