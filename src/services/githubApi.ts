@@ -595,11 +595,13 @@ export function processUserActivity(
 ): ProcessedActivity {
   const now = Date.now();
 
-  // Filter events strictly to those within the last 72 hours
-  const recentEvents = events.filter((ev) => {
-    const eventTime = new Date(ev.created_at).getTime();
-    return !Number.isNaN(eventTime) && (now - eventTime) <= SEVENTY_TWO_HOURS_MS && eventTime <= now;
-  });
+  // Filter events strictly to those within the last 72 hours, sorted latest first
+  const recentEvents = events
+    .filter((ev) => {
+      const eventTime = new Date(ev.created_at).getTime();
+      return !Number.isNaN(eventTime) && (now - eventTime) <= SEVENTY_TWO_HOURS_MS && eventTime <= now;
+    })
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   const stats: ActivityStats = {
     totalEvents: recentEvents.length,

@@ -42,15 +42,8 @@ function formatEventTime(dateString: string): string {
       const minutes = Math.floor(diffSeconds / 60);
       return `${minutes}m ago`;
     }
-    if (diffSeconds < 86400) {
-      const hours = Math.floor(diffSeconds / 3600);
-      return `${hours}h ago`;
-    }
-    if (diffSeconds < 604800) {
-      const days = Math.floor(diffSeconds / 86400);
-      return `${days}d ago`;
-    }
-    return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(date);
+    const hours = Math.floor(diffSeconds / 3600);
+    return `${hours}hr ago`;
   } catch {
     return dateString;
   }
@@ -114,16 +107,17 @@ export function ContributionGraph({ username, className = '', onOpenRepoCommits 
 
   const filteredEvents = useMemo(() => {
     if (!data) return [];
-    if (activeFilter === 'all') return data.events;
-    if (activeFilter === 'pushes') return data.events.filter((e) => e.type === 'PushEvent');
-    if (activeFilter === 'prs') return data.events.filter((e) => e.type === 'PullRequestEvent');
-    if (activeFilter === 'issues')
-      return data.events.filter((e) => e.type === 'IssuesEvent' || e.type === 'IssueCommentEvent');
-    if (activeFilter === 'creates')
-      return data.events.filter((e) => e.type === 'CreateEvent' || e.type === 'DeleteEvent');
-    if (activeFilter === 'stars')
-      return data.events.filter((e) => e.type === 'WatchEvent' || e.type === 'ForkEvent');
-    return data.events;
+    let list = data.events;
+    if (activeFilter === 'pushes') list = list.filter((e) => e.type === 'PushEvent');
+    else if (activeFilter === 'prs') list = list.filter((e) => e.type === 'PullRequestEvent');
+    else if (activeFilter === 'issues')
+      list = list.filter((e) => e.type === 'IssuesEvent' || e.type === 'IssueCommentEvent');
+    else if (activeFilter === 'creates')
+      list = list.filter((e) => e.type === 'CreateEvent' || e.type === 'DeleteEvent');
+    else if (activeFilter === 'stars')
+      list = list.filter((e) => e.type === 'WatchEvent' || e.type === 'ForkEvent');
+
+    return list.slice().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [data, activeFilter]);
 
   const renderEventCard = (event: GithubEvent) => {

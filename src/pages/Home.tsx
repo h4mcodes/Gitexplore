@@ -9,7 +9,7 @@ export function Home() {
       <div className="ambient ambient-blue" />
       <div className="ambient ambient-purple" />
       <div className="ambient ambient-green" />
-      <Navbar />
+      <Navbar showLabel={false} />
       <section className="hero">
         <motion.div
           className="hero-copy"
