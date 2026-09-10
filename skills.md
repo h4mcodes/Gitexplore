@@ -27,24 +27,26 @@ GitExplore directly addresses these core challenges:
 Only active, verified technologies in the codebase are documented here:
 
 ### Frontend Core
-- **React 18**: Component-based UI layer and reactive state management.
+- **React 19**: Component-based UI layer and reactive state management.
 - **TypeScript 5 (Strict Mode)**: Strict compile-time typing for domain models, API schemas, and component interfaces.
 - **Vite 6**: High-performance local development server and optimized production bundler.
 - **React Router DOM 7**: Client-side single-page routing (`/` and `/profile/:username`).
 
 ### Styling & Interaction
-- **Tailwind CSS & Vanilla CSS**: Unified design system tokens, responsive grid layouts, and glassmorphic material styling.
+- **Handcrafted CSS Material Design System**: Unified design system tokens, responsive grid layouts, and light frosted glass material styling in `src/index.css`.
 - **Framer Motion**: Hardware-accelerated entrance transitions, accordion animations, and interactive feedback.
 - **Lucide React**: Vector icons for Git branches, commits, forks, issues, external links, and navigation.
 
-### Data & Network
+### Data, Security & Network
 - **Native Fetch API**: Standard browser-native HTTP requests without external wrapper bloat.
-- **GitHub REST API**: Public endpoints for users, repositories, branches, commits, and events.
+- **GitHub REST API**: Public endpoints for users, repositories, branches, commits, comparisons, and events.
 - **GitHub Contributions API**: Full 365-day historical contribution calendar integration.
+- **In-Memory Caching & Request Deduplication**: Dynamic TTLs, in-flight promise sharing, and rate-limit tracking in `src/services/githubApi.ts`.
+- **Security Sanitization**: Client-side URL validation and input sanitization in `src/services/security.ts`.
 
 ---
 
-## 4. Current Verified Capabilities (Day 1 – 4)
+## 4. Current Verified Capabilities (Day 1 – 7)
 
 ### Day 1 — Foundation (Completed)
 - Clean, responsive shell and component structure.
@@ -68,7 +70,24 @@ Only active, verified technologies in the codebase are documented here:
 - **Branch Explorer (`BranchExplorer.tsx`)**: Real branch fetching, default branch identification, protected status badges, and branch search.
 - **Commit History Explorer (`CommitHistory.tsx`)**: Commit history inspection per branch with author details, commit messages, SHAs, and external GitHub links.
 - **Bidirectional Commit Relationship Model (`buildCommitRelationshipModel`)**: Deterministic parent <-> child commit graph modeling, merge/root commit detection, and lineage inspection drawers.
-- **12-Month Contribution Heatmap (`ContributionGraph.tsx`)**: Full 365-day calendar matrix across all 12 distinct months, live event stream, and category filtering.
+- **12-Month Contribution Heatmap & Event Stream (`ContributionGraph.tsx`)**: Full 365-day calendar matrix across all 12 distinct months, rolling 72h event feed with direct commit navigation, and category filtering.
+
+### Day 5 — Change Investigation (Completed)
+- **Detailed Commit Inspection (`CommitInspection.tsx`)**: Deep modal view of commit metadata, author details, parent hashes, patch listings, and additions/deletions.
+- **Code Diff Visualization (`DiffViewer.tsx`)**: Interactive diff renderer with side-by-side (split) and inline (unified) views, chunked line rendering, and syntax-aware diff highlights.
+- **Branch Comparison (`BranchCompare.tsx`)**: Direct branch-to-branch divergence analysis showing ahead/behind counts, commit delta logs, and cumulative changed-file diffs.
+
+### Day 6 — Reliability & Engineering (Completed)
+- **API Caching & Request Deduplication**: In-memory caching with resource-specific TTLs (5m profiles, 3m repos, 15m immutable commits) and in-flight promise sharing.
+- **Rate-Limit Resilience**: Centralized rate-limit tracker, header parser, and actionable reset countdown banners.
+- **React Error Boundaries (`ErrorBoundary.tsx`)**: Component-level failure isolation with diagnostic logs, safe fallback UI, and recovery actions.
+- **Offline / Degraded Mode (`NetworkStatusBanner.tsx`)**: Real-time browser connectivity detection with persistent reconnection alerts.
+- **Input & URL Security Sanitization (`security.ts`)**: Protocol whitelisting (`http:`, `https:`) preventing `javascript:`, `data:`, and XSS injection vectors.
+
+### Day 7 — Production Readiness (Completed)
+- **CI/CD Quality Pipeline (`.github/workflows/ci.yml`)**: Automated GitHub Actions workflow enforcing `npm ci` and strict `npm run build` (`tsc -b && vite build`) validation.
+- **Production Asset Optimization**: Verified production bundle generation, tree-shaking, and minification.
+- **Documentation Synchronization**: Comprehensive `README.md`, updated engineering references, and clean repository hygiene.
 
 ---
 
@@ -83,29 +102,17 @@ Only active, verified technologies in the codebase are documented here:
 
 ---
 
-## 6. Updated Roadmap (Day 5 – 7)
+## 6. Completed Roadmap (Day 1 – 7)
 
-*Note: Items below represent planned future milestones and are not yet implemented in the codebase.*
-
-### Day 5 — Change Investigation (Planned)
-- Detailed commit inspection and patch review
-- Code diff visualization (side-by-side and inline unified views)
-- Commit-to-commit and branch comparison
-- Changed-file investigation with additions/deletions metrics
-- Root-cause code change tracing
-
-### Day 6 — Reliability & Engineering (Planned)
-- Client-side caching and GitHub API rate-limit resilience
-- Error boundaries and graceful offline/degraded states
-- Virtualization / performance optimization for massive commit logs
-- Comprehensive unit and component testing
-- Input sanitization and security auditing
-
-### Day 7 — Production Readiness (Planned)
-- Continuous Integration & Deployment (CI/CD) pipelines
-- Complete architecture documentation and setup guides
-- Live demonstration workflows and user validation
-- Production artifact verification
+```text
+[✓] Day 1: Foundation (Project setup, UI system, responsive shell)
+[✓] Day 2: GitHub Profile Integration (Real profile API, search, routing)
+[✓] Day 3: Repository Intelligence Foundation (Repo explorer, filtering, sorting, stats)
+[✓] Day 4: Git History Intelligence (Branches, commits, DAG relationships, activity)
+[✓] Day 5: Change Investigation (Diff viewer, branch comparison, commit inspection)
+[✓] Day 6: Reliability & Engineering (Caching, error boundaries, offline mode, perf optimization)
+[✓] Day 7: Production Readiness (CI/CD pipeline, build audit, documentation, release validation)
+```
 
 ---
 
@@ -114,7 +121,7 @@ Only active, verified technologies in the codebase are documented here:
 Future coding agents must follow these strict guardrails:
 - **Never Add "Feature Creep"**: Do not introduce random or unrequested features just to make the application appear larger.
 - **Answer the Core Question**: Every proposed feature must answer: *"What real developer problem does this solve?"*
-- **Preserve Day 1–4 Code**: Never delete, rewrite, or refactor working foundation code from completed milestones.
+- **Preserve Day 1–7 Code**: Never delete, rewrite, or refactor working foundation code from completed milestones.
 - **Preserve TypeScript Rigor**: Do not bypass typing with `any` or loose assertions.
 
 ---

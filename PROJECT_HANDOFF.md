@@ -77,32 +77,57 @@ This document is the source of truth for the completed GitExplore work. Read it 
 - Use public GitHub data only. Never introduce client-side secrets or invented authentication.
 - Do not use browser `alert()` for errors.
 
-## Known boundary and future work
+### Day 4 — Git history intelligence (complete)
 
-- The completed Day 3 scope ends at the repository explorer. Do not add contribution heatmaps, activity charts, analytics, commit history, authentication, backend services, databases, AI features, or deployment work unless specifically requested.
-- The existing landing-page dashboard preview remains static. It is not a real contribution graph or analytics feature.
-- If a future requirement needs every repository beyond GitHub’s 100-item page limit, extend `fetchGithubRepositories` with explicit pagination and revisit wording/statistics that currently say “loaded.” Do not silently claim totals represent every repository for users with more than 100.
+- **Branch Explorer (`BranchExplorer.tsx`)**: Fetches repository branches (`fetchGithubBranches`), marks default branch, highlights protected branches, and offers instant client-side search.
+- **Commit History (`CommitHistory.tsx`)**: Fetches branch commits (`fetchGithubCommits`), author details, commit messages, SHAs, and timestamp formatting.
+- **Bidirectional Parent-Child DAG Graph (`buildCommitRelationshipModel`)**: Deterministic graph modeling classifying merge commits, root commits, commit lineage, and interactive branch-out drawers.
+- **Full 12-Month Contribution Calendar (`ContributionGraph.tsx`)**: Full 365-day calendar matrix across all 12 distinct months with intensity levels, rolling 72-hour activity feed, category filtering, and direct commit jump navigation.
 
-## Change discipline for the next agent
+### Day 5 — Change investigation (complete)
 
-1. Read `AGENTS.md`, `skills.md`, and this file before implementation.
-2. Inspect only files relevant to the requested change; do not rewrite the project for a small feature.
-3. Keep raw network logic in `src/services/githubApi.ts` and typed API shapes in `src/types/github.ts`.
-4. Preserve the two existing routes, the profile flow, the real repository flow, and the visual system.
-5. Prefer React local state and the installed dependencies. Do not add packages merely for convenience.
-6. Do not change or remove the static home preview unless the request explicitly names it.
-7. For UI work, check desktop and mobile behavior, long text, missing repository fields, loading, empty, and error cases as relevant.
-8. Run `npm run build` and `git diff --check` after implementation. Do not claim validation that was not performed.
-9. Do not create commits, push, or modify unrelated files without explicit user direction.
+- **Commit Inspection (`CommitInspection.tsx`)**: Modal commit inspection reviewing commit metadata, parent hashes, patch summaries, and additions/deletions stats.
+- **Code Diff Visualization (`DiffViewer.tsx`)**: Interactive diff renderer with side-by-side (split) and inline (unified) views, chunked line rendering, and syntax-aware diff highlights.
+- **Branch Comparison (`BranchCompare.tsx`)**: Direct branch-to-branch divergence comparison showing ahead/behind counts, commit delta logs, and cumulative changed-file diffs.
 
-## Recent validated milestones
+### Day 6 — Reliability & engineering (complete)
 
-- `3c2f5e2` — repository API feature.
-- `bfccda6` — real repository rendering, loading/error/empty states, and responsive cards.
-- `97ee0d1` — client-side repository search, language filter, and sorting.
-- `a58b7c4` — 12-item load more, repository aggregate stats, and Day 3 polish.
-- The latest completed production validation was `npm run build`; it passed after the Day 3 final milestone.
+- **API Caching & Request Deduplication**: In-memory caching with resource-specific TTLs (5m profiles, 3m repos, 15m immutable commits) and in-flight promise sharing in `src/services/githubApi.ts`.
+- **Rate-Limit Resilience**: Centralized rate-limit tracker, header parser, and actionable reset countdown banners.
+- **React Error Boundaries (`ErrorBoundary.tsx`)**: Component-level failure isolation with diagnostic logs, safe fallback UI, and recovery actions.
+- **Offline / Degraded Mode (`NetworkStatusBanner.tsx`)**: Real-time browser connectivity detection with persistent reconnection alerts.
+- **Input & URL Security Sanitization (`security.ts`)**: Protocol whitelisting (`http:`, `https:`) preventing `javascript:`, `data:`, and XSS injection vectors.
 
-## Current handoff state
+### Day 7 — Production readiness (complete)
 
-The working tree was clean when this handoff document was created, apart from this new file. The complete existing product behavior is intentional. Treat this as a continuation project, not a fresh scaffold.
+- **CI/CD Quality Pipeline (`.github/workflows/ci.yml`)**: Automated GitHub Actions workflow enforcing `npm ci` and strict `npm run build` (`tsc -b && vite build`) validation.
+- **Production Asset Optimization**: Verified production bundle generation, tree-shaking, and minification.
+- **Documentation Synchronization**: Comprehensive `README.md`, updated engineering references, and clean repository hygiene.
+
+## Important implementation map
+
+| File | Responsibility / constraints |
+| --- | --- |
+| `src/main.tsx` | StrictMode entry point and global stylesheet import. |
+| `src/App.tsx` | Global ErrorBoundary, NetworkStatusBanner, and client-side route definitions. |
+| `src/pages/Home.tsx` | Landing page, hero, search entry point, and static dashboard preview. |
+| `src/pages/Profile.tsx` | Owns profile/repository request state, filtering, sorting, pagination, and workbench orchestration. |
+| `src/components/BranchCompare.tsx` | Branch-to-branch commit & file comparison. |
+| `src/components/BranchExplorer.tsx` | Branch listing, search, switcher, and commit trigger. |
+| `src/components/CommitHistory.tsx` | Branch commit log, DAG lineage inspection, and inspection trigger. |
+| `src/components/CommitInspection.tsx` | Detailed commit modal and file patch review. |
+| `src/components/ContributionGraph.tsx` | 12-month calendar heatmap matrix and 72h rolling event feed. |
+| `src/components/DiffViewer.tsx` | Side-by-side and inline unified patch diff renderer. |
+| `src/components/ErrorBoundary.tsx` | React error boundary with diagnostic feedback and recovery. |
+| `src/components/GlassDropdown.tsx` | Reusable frosted glass dropdown. |
+| `src/components/Navbar.tsx` | Shared branded header. |
+| `src/components/NetworkStatusBanner.tsx` | Real-time offline/online connectivity detector. |
+| `src/components/ProfileCard.tsx` | Profile preview primitive. |
+| `src/components/RepoCard.tsx` | Repository intelligence card with embedded branch and history views. |
+| `src/components/SearchBar.tsx` | Search form with empty-input validation and navigation. |
+| `src/components/StatsCard.tsx` | Reused for profile and repository aggregate statistics. |
+| `src/services/githubApi.ts` | Centralized GitHub REST API, in-memory caching, TTL management, and graph logic. |
+| `src/services/security.ts` | URL sanitization and input validation utilities. |
+| `src/types/github.ts` | Strict domain models and TypeScript interfaces. |
+| `src/index.css` | Design system tokens, light frosted glass theme, responsive layout, and animations. |
+| `.github/workflows/ci.yml` | GitHub Actions automated typecheck and build validation workflow. |
