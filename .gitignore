@@ -10,7 +10,4 @@ Thumbs.db
 .eslintcache
 .cache
 
-# Agent instructions & internal handoff files not needed for runtime
-AGENTS.md
-skills.md
-PROJECT_HANDOFF.md
+
